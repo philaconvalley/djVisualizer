@@ -34,6 +34,11 @@ class DJVisualizer {
     this.gridSize = 20;
     this.snowflakes = [];
     
+    // Custom uploaded media state (image/gif/video)
+    this.customMedia = null;
+    this.customMediaType = null; // 'image' | 'video'
+    this.customMediaURL = null;
+
     // Polygon visualization state
     this.polygonPoints = [];
     this.sampleRate = 8;
@@ -61,13 +66,32 @@ class DJVisualizer {
     // Initialize visualization mode selector
     this.visualModeSelect = document.getElementById('visualMode');
     this.visualModeSelect.addEventListener('change', (e) => {
+      const previousMode = this.currentMode;
       this.currentMode = e.target.value;
       console.log('Visualization mode changed to:', this.currentMode);
       this.initializeParticles();
       if (this.currentMode === 'snake') {
         this.initializeSnake();
       }
+      // Pause/resume uploaded video when leaving/entering custom mode
+      if (this.customMediaType === 'video' && this.customMedia) {
+        if (this.currentMode === 'custom') {
+          this.customMedia.loop();
+        } else if (previousMode === 'custom') {
+          this.customMedia.pause();
+        }
+      }
     });
+
+    // Custom media upload (image/gif/video)
+    this.customMediaInput = document.getElementById('customMediaUpload');
+    this.customMediaStatus = document.getElementById('customMediaStatus');
+    if (this.customMediaInput) {
+      this.customMediaInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) this.loadCustomMedia(file);
+      });
+    }
     
     this.p5Instance = new p5((p) => {
       p.setup = () => {
@@ -135,6 +159,57 @@ class DJVisualizer {
         size: Math.random() * 3 + 1
       });
     }
+  }
+
+  loadCustomMedia(file) {
+    if (!this.p5Instance) return;
+
+    this.clearCustomMedia();
+
+    const url = URL.createObjectURL(file);
+    this.customMediaURL = url;
+
+    if (file.type.startsWith('video/')) {
+      this.customMediaType = 'video';
+      const video = this.p5Instance.createVideo([url], () => {
+        video.volume(0);
+        video.hide();
+        if (this.currentMode === 'custom') video.loop();
+        this.customMedia = video;
+        if (this.customMediaStatus) this.customMediaStatus.textContent = `Loaded: ${file.name}`;
+      });
+    } else if (file.type.startsWith('image/')) {
+      this.customMediaType = 'image';
+      this.p5Instance.loadImage(
+        url,
+        (img) => {
+          this.customMedia = img;
+          if (this.customMediaStatus) this.customMediaStatus.textContent = `Loaded: ${file.name}`;
+        },
+        () => {
+          if (this.customMediaStatus) this.customMediaStatus.textContent = `Failed to load: ${file.name}`;
+          URL.revokeObjectURL(url);
+          this.customMediaURL = null;
+        }
+      );
+    } else {
+      if (this.customMediaStatus) this.customMediaStatus.textContent = 'Unsupported file type';
+      URL.revokeObjectURL(url);
+      this.customMediaURL = null;
+    }
+  }
+
+  clearCustomMedia() {
+    if (this.customMediaType === 'video' && this.customMedia) {
+      this.customMedia.stop();
+      this.customMedia.remove();
+    }
+    if (this.customMediaURL) {
+      URL.revokeObjectURL(this.customMediaURL);
+      this.customMediaURL = null;
+    }
+    this.customMedia = null;
+    this.customMediaType = null;
   }
 
   initSpectrumVisualizer() {
@@ -254,6 +329,9 @@ class DJVisualizer {
         break;
       case 'polygons':
         this.drawAudioPolygons(p);
+        break;
+      case 'custom':
+        this.drawCustomMedia(p);
         break;
       default:
         this.drawFloatingParticles3D(p);
@@ -686,6 +764,62 @@ class DJVisualizer {
         p.sphere(size);
         p.pop();
       }
+      p.pop();
+    }
+  }
+
+  drawCustomMedia(p) {
+    if (!this.customMedia) {
+      p.push();
+      p.fill(255, 120);
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textSize(16);
+      p.text('Upload an image, GIF, or video to begin', 0, 0);
+      p.pop();
+      return;
+    }
+
+    const bass = this.audioData.bass || 0;
+    const mid = this.audioData.mid || 0;
+    const high = this.audioData.high || 0;
+
+    // Fit media into the canvas while preserving aspect ratio
+    const mediaW = this.customMedia.width || 1;
+    const mediaH = this.customMedia.height || 1;
+    const fitScale = Math.min(this.w / mediaW, this.h / mediaH) * 0.8;
+    const baseW = mediaW * fitScale;
+    const baseH = mediaH * fitScale;
+
+    p.push();
+    // Bass: pulse scale, with a kick on the beat
+    const pulse = 1 + bass * 0.6 + this.beatPulse * 0.15;
+    p.scale(pulse);
+    // Mid: gentle wobble rotation
+    p.rotateZ(mid * 0.4 * Math.sin(this.time * 2));
+
+    // High: cheap chromatic-aberration glitch via offset color-tinted copies
+    if (high > 0.05) {
+      const offset = high * 20;
+      p.push();
+      p.tint(...this.colors.bass, 120);
+      p.image(this.customMedia, -baseW / 2 - offset, -baseH / 2, baseW, baseH);
+      p.pop();
+      p.push();
+      p.tint(...this.colors.high, 120);
+      p.image(this.customMedia, -baseW / 2 + offset, -baseH / 2, baseW, baseH);
+      p.pop();
+    }
+
+    p.tint(255, 255);
+    p.image(this.customMedia, -baseW / 2, -baseH / 2, baseW, baseH);
+    p.pop();
+
+    // BPM beat flash overlay
+    if (this.beatFlash > 0.05) {
+      p.push();
+      p.noStroke();
+      p.fill(255, this.beatFlash * 120);
+      p.rect(-this.w / 2, -this.h / 2, this.w, this.h);
       p.pop();
     }
   }
@@ -1418,6 +1552,7 @@ class DJVisualizer {
   }
 
   destroy() {
+    this.clearCustomMedia();
     if (this.p5Instance) {
       this.p5Instance.remove();
     }

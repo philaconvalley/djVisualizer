@@ -46,10 +46,22 @@
               <option value="tunnel">Tunnel Vision</option>
               <option value="galaxy">Galaxy</option>
               <option value="polygons">Polygon Collage</option>
+              <option value="custom">Custom Upload</option>
             </select>
           </div>
         </div>
-        
+
+        <div class="control-section" id="customMediaSection">
+          <h3>Custom Media</h3>
+          <div class="control-group">
+            <label for="customMediaUpload">Image / GIF / Video:</label>
+            <input type="file" id="customMediaUpload" accept="image/*,video/*">
+          </div>
+          <div class="control-group">
+            <span id="customMediaStatus" class="custom-media-status">No file selected</span>
+          </div>
+        </div>
+
         <div class="control-section">
           <h3>EQ Sensitivity</h3>
           <div class="sensitivity-controls">
