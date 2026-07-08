@@ -2,6 +2,8 @@
 
 A web-based audio visualizer and processor for DJs, built with JavaScript. This project lets you visualize and manipulate audio in real time, making it perfect for live performances, music analysis, or just having fun with sound.
 
+Performed live at [Indy Hall](https://www.indyhall.org/) in Philadelphia, driving real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
+
 ## Features
 - Real-time audio visualization
 - Audio processing and effects
@@ -9,7 +11,14 @@ A web-based audio visualizer and processor for DJs, built with JavaScript. This 
 - Modern, responsive UI
 
 ## Demo
-To see the app in action, clone the repo and follow the instructions below.
+
+![Galaxy visualization mode reacting to audio](docs/screenshots/demo.gif)
+
+| Spectrum Bars | Mandala |
+| --- | --- |
+| ![Spectrum bars mode](docs/screenshots/spectrum-bars.png) | ![Mandala mode](docs/screenshots/mandala-mode.png) |
+
+To see the app in action yourself, clone the repo and follow the instructions below.
 
 ## Getting Started
 
@@ -20,8 +29,8 @@ To see the app in action, clone the repo and follow the instructions below.
 ### Installation
 1. Clone the repository:
 	 ```sh
-	 git clone https://github.com/traksaw/jsDJVisualizer.git
-	 cd jsDJVisualizer
+	 git clone https://github.com/philaconvalley/djVisualizer.git
+	 cd djVisualizer
 	 ```
 2. (Optional) Install dependencies if you plan to extend or build locally:
 	 ```sh
