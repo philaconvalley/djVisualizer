@@ -19,11 +19,3 @@
   for = "*.css"
   [headers.values]
     Content-Type = "text/css"
-
-# Redirect rules for SPA behavior if needed
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-  conditions = {Role = ["admin"]}
-  force = false
