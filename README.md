@@ -105,7 +105,7 @@ test/                   Verification harness (see CONTRIBUTING.md)
 PRODUCT.md              Users, constraints, product principles
 DESIGN.md               Visual and behavioural decisions, and why
 RESOURCES.md            Architecture reference, setup, troubleshooting
-netlify.toml, vercel.json   Deployment configs (nothing deployed yet)
+netlify.toml, vercel.json   Deployment configs (Netlify hosts the live build)
 ```
 
 ## Contributing

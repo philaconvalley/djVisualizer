@@ -55,10 +55,11 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 
 4. Device selection
    - The app auto-detects and prioritizes DJ devices (DDJ-REV1 first, then any DDJ, then Pioneer devices).
-   - Use the “Input Device” dropdown to override. DJ devices are labeled with a 🎧.
+   - Use the “Source” dropdown to override. DJ devices are prefixed `DJ ·` and sorted to the top.
 
 5. Gain staging
-   - Use the EQ Sensitivity sliders for Bass/Mid/High to visually balance inputs from your mixer/controller.
+   - Each band in the rail is one control: the coloured fill is the live post-gain level, the white bar is the gain you asked for. Drag to balance the look against your mixer's output.
+   - Gain affects the visuals only. Beat and BPM detection read the input ahead of these sliders, so moving them can never change what BPM reports.
 
 
 ## Controls and Shortcuts
@@ -68,10 +69,9 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 - Keyboard
   - Space: Start/Stop Audio
   - F: Toggle Fullscreen
-  - 1: Spectrum Bars
-  - 2: Floating Particles
-  - 3: Frequency Rings
-  - 4: Wave Forms
+  - 1–9: Switch mode, in dropdown order — Spectrum Bars, Floating Particles,
+    Frequency Rings, Wave Forms, Mandala, Tunnel Vision, Galaxy, Polygon Collage,
+    Custom Upload
   - R: Reset Gains to 1.0
   - ?: Show/Hide Help
 
@@ -86,39 +86,65 @@ Defined in `index.html` (`#visualMode`) and implemented in `DJVisualizer`.
 - Floating Particles (`drawParticleField`)
   - 3D particle field of billboarded emissive discs, sorted back to front. Depth carries the band: bass far and heavy, highs near and quick.
 
-- Frequency Rings (`drawFrequencyRings3D`)
-  - Rotating rings with band-specific color/intensity and audio-driven radius/thickness.
+- Frequency Rings (`drawFrequencyRings`)
+  - Three nested groups, one per band, inner to outer in frequency order. Radius and weight follow the band; the rings breathe out of phase so the figure never reads as one solid disc pumping.
 
-- Wave Forms (`drawAudioWaves`)
-  - Three layered waves for bass/mid/high across the screen with different speeds and spacings.
+- Wave Forms (`drawWaveforms`)
+  - Three stacked waveforms. Shape is read from each band's own spectrum slice rather than from a sine wave, so what is on screen is the sound and not an animation timed to arrive alongside it.
 
 - Mandala (`drawMandala`)
-  - Hypnotic radial lines with band-aware coloring and stroke weights.
+  - Radial spokes whose count comes from band energy, so the figure gains and loses structure with the music. Every fourth spoke extends on the beat.
 
 - Tunnel Vision (`drawTunnel`)
-  - Depth-driven tunnel effect modulated by energy; syncs with beat pulse for impacts.
+  - Rings advancing by beat phase, so the tunnel moves a fixed distance per beat. Colour by depth in frequency order — a spectrum you fly through.
 
 - Galaxy (`drawGalaxy`)
-  - Starfield/nebula-like motion with frequency band colorization.
+  - Spiral arms where radius carries frequency: bass at the core, air at the rim. A bass drop lights the centre, a hi-hat pattern lights the edge.
 
-- Polygon Collage (`drawAudioPolygons`)
-  - Beat-aware polygon bursts. Background isn’t cleared every frame to create an evolving collage.
+- Polygon Collage (`drawPolygonCollage`)
+  - Paint lands and stays, so by the end of a track the screen is a record of what was played. Renders into `#collage-canvas`, a 2D layer beneath the transparent WEBGL one, with a very slow fade so a long set does not turn to mud.
 
-All modes use the same band color semantics:
-- Bass (20–250Hz): Red `this.colors.bass`
-- Mid (250–4kHz): Green `this.colors.mid`
-- High (4k–20kHz): Blue `this.colors.high`
+- Custom Upload (`drawCustomMedia`)
+  - The operator's own image, GIF, or video. Bass scales it, mid tilts it, high splits it into band-tinted copies. With nothing loaded it draws a geometric drop target — p5's WEBGL `text()` needs a font file, and fetching one at showtime is forbidden.
+
+All modes use the same band colour semantics, read from the CSS tokens at
+startup rather than hard-coded per mode:
+- Bass (20–250 Hz): `--bass` → `this.colors.bass`
+- Mid (250 Hz–4 kHz): `--mid` → `this.colors.mid`
+- High (4–20 kHz): `--high` → `this.colors.high`
+
+They also share one grammar beyond colour — stacked emissive passes, one
+response curve, one idle breath, beat-phase timing, and a composition box that
+clears the console rail. `DESIGN.md` explains each clause and why it is enforced
+in code rather than remembered.
 
 
 ## How Audio Data Flows
-1. `AudioProcessor.startAudio()` builds the graph: `MediaStreamSource → AnalyserNode`.
-2. `updateAudioData()` fills `dataArray` (freq) and `timeDataArray` (time domain), computes:
+1. `AudioProcessor.startAudio()` builds the graph. Two branches from one source:
+   - `MediaStreamSource → AnalyserNode` for the spectrum the visuals read.
+   - `MediaStreamSource → AudioWorklet('kick-envelope') → zero-gain → destination`
+     for beat detection. The silent gain node exists only because a worklet is
+     not pulled unless it reaches the destination; routing the booth's own
+     signal back out of the laptop would be a feedback loop.
+2. `updateAudioData()` runs on a fixed `setInterval`, **not** on
+   `requestAnimationFrame`, and computes:
    - `rms`
    - `spectrum` (0–1 normalized)
-   - band energies via `bandEnergy()` → `bass`, `mid`, `high` (smoothed)
-   - `bpm` via simple peak detection over bass
-3. `onDataUpdate(data)` callback in `app/app.js` applies slider gains and forwards to `DJVisualizer.updateAudioData()`.
-4. `DJVisualizer.draw()` renders based on `currentMode` and `audioData`.
+   - band energies via `bandEnergy(spec, sampleRate)` → `bass`, `mid`, `high`,
+     each RMS over its own real-hertz bin range, smoothed on elapsed time
+   - `binHz`, so the stage can draw a log-frequency spectrum
+3. Beats arrive separately. The worklet posts timestamped envelope samples;
+   `drainEnvelope()` replays them through `detectBeat()` in order, so a main
+   thread that woke late still sees every kick at its true time. Confirmed beats
+   fire `onBeat`.
+4. `onDataUpdate(data)` in `app/app.js` applies slider gains and forwards to
+   `DJVisualizer.updateAudioData()`; `onBeat` drives both the rail indicator and
+   `DJVisualizer.onBeatEvent()`.
+5. `DJVisualizer.draw()` renders based on `currentMode` and `audioData`.
+
+**Why two clocks.** Analysis chained to `requestAnimationFrame` inherited the
+renderer's frame rate; measured under load it fell to about 6 Hz, fewer samples
+than there were beats. Listening is not drawing and must not be throttled by it.
 
 
 ## Performance & Live Demo Tips
@@ -135,6 +161,17 @@ All modes use the same band color semantics:
   - USB direct from DDJ-REV1 provides lowest latency and best signal quality.
 
 
+## Verifying a change
+
+`npm run verify` runs the app in Chromium against generated audio with known
+frequency content, through the fake capture device. Real `MediaStream`,
+`AudioContext`, `AnalyserNode`, FFT and DOM — only the microphone is
+substituted. 38 checks; screenshots of every mode land in `test/output/`.
+
+It cannot cover device enumeration, USB line level, thermals, or the projector.
+`CONTRIBUTING.md` carries the hardware checklist for those.
+
+
 ## Troubleshooting
 - “Microphone access denied”
   - Allow in browser prompt. If still failing, macOS System Settings → Privacy → Microphone → enable your browser.
@@ -146,12 +183,16 @@ All modes use the same band color semantics:
   - App falls back from `exact` to `ideal` deviceId. Try another input or switch back to Auto.
 - BPM seems half-time
   - The detector attempts to double BPM between 45–90. Verify kick clarity and input level.
+- BPM reads “—” with music clearly playing
+  - The kick worklet failed to start and the console will say so; detection has fallen back to the render thread, where a heavy mode can starve it. Check for a browser without `AudioWorklet`, or a page served from `file://`.
 
 
 ## Extend and Customize
 - Add a new visualization mode
-  - In `index.html` add `<option value="myMode">My Mode</option>`
+  - In `index.html` add `<option value="myMode">My Mode</option>` — keys 1–9 map to dropdown order, so position matters.
   - In `DJVisualizer.draw()` add a new case `"myMode"` and implement `drawMyMode(p)`.
+  - Follow the stage grammar, or the mode will look like it came from a different product. `CONTRIBUTING.md` has the checklist; the short version is: colour from `this.colors`, levels through `this.band()`, light through `emissiveStroke`/`emissiveDot`, timing off `this.phase` and `this.beat`, composition inside `this.vw` × `this.vh`.
+  - Run `npm run verify` and look at your mode's screenshot in `test/output/`.
 
 - Integrate feature detection or more advanced onset/BPM libraries
   - Current implementation is custom and lightweight. You can optionally explore Meyda (feature extraction) to add spectral features, but it’s not required in this codebase.
@@ -178,16 +219,16 @@ All modes use the same band color semantics:
 
 ## Demo Flow (Meetup Script)
 1. Plug in DDJ-REV1 and open the app.
-2. Show device auto-detection (🎧 tag) and start audio.
+2. Show device auto-detection (`DJ ·` prefix, sorted first) and start audio.
 3. Highlight EQ meters reacting to bass/mid/high.
-4. Switch modes (1–4) and explain how each band contributes visually.
+4. Switch modes (1–9) and explain how each band contributes visually.
 5. Adjust sensitivity sliders to re-balance the look live.
 6. Toggle fullscreen and walk through BPM indicator.
 7. End by showing the Polygon Collage for a dramatic finish.
 
 
 ## BPM Detection Resources
-The current implementation in `app/audioProcessor.js` uses a lightweight custom approach (`detectBeat()`) based on bass energy peaks with interval averaging and smoothing. For more robust or alternative BPM/onset detection strategies, these resources are helpful:
+The current implementation in `app/audioProcessor.js` runs a kick-envelope follower in an `AudioWorklet` on the audio thread — a one-pole lowpass near 180 Hz, peak-held and posted at about 86 Hz with audio-clock timestamps. `detectBeat()` then peaks against a 700 ms running mean rather than a fixed threshold, so it survives the operator moving gain mid-set, with interval averaging and smoothing on top. For more robust or alternative BPM/onset detection strategies, these resources are helpful:
   - Meyda (feature extraction – spectral flux, energy, etc.): https://meyda.js.org/
   - music-tempo (tempo estimation from onset arrays): https://github.com/ibbatta/music-tempo
   - web-audio-beat-detector (utility for BPM estimation via Web Audio): https://github.com/chrisguttandin/web-audio-beat-detector
