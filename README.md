@@ -18,9 +18,10 @@ real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
 | --- | --- |
 | ![Spectrum bars mode](docs/screenshots/spectrum-bars.png) | ![Mandala mode](docs/screenshots/mandala-mode.png) |
 
-There is no hosted demo yet. Deployment configs are in the repo but nothing is
-deployed. To see it running, clone it and follow the steps below — it takes about
-a minute and needs no build.
+**Live build: [dj-visualizer.netlify.app](https://dj-visualizer.netlify.app)** —
+deployed from `main`. It needs an audio input and microphone permission; with no
+signal it will sit black, which is deliberate, not a fault. To drive it from DJ
+hardware, run it locally with the steps below.
 
 ## What it does
 
@@ -104,7 +105,7 @@ test/                   Verification harness (see CONTRIBUTING.md)
 PRODUCT.md              Users, constraints, product principles
 DESIGN.md               Visual and behavioural decisions, and why
 RESOURCES.md            Architecture reference, setup, troubleshooting
-netlify.toml, vercel.json   Deployment configs (nothing deployed yet)
+netlify.toml, vercel.json   Deployment configs (Netlify hosts the live build)
 ```
 
 ## Contributing
