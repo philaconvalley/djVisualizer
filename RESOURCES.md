@@ -244,6 +244,24 @@ The current implementation in `app/audioProcessor.js` runs a kick-envelope follo
 Tip: You can keep the fast custom detector for responsiveness and overlay a slower, more stable library estimate to refine the displayed BPM.
 
 
+## Deployment
+
+Netlify is the only host, deploying from `main` with a preview per pull request.
+`netlify.toml` publishes the tree as-is (`publish = "."`) with no build step and
+no rewrite rules, which is the whole configuration — a static site does not need
+more, and every deployment bug this project has had came from a config that
+tried to do more.
+
+A `vercel.json` used to sit alongside it. Two hosts building from one commit
+meant one of them could break unnoticed, and one did: its legacy `builds` array
+enumerated files by name, so vendoring p5 produced a 404 for `vendor/p5.min.js`
+on Vercel while Netlify was fine. Removed 2026-08-09; do not reintroduce a
+second host without a reason that outweighs having two configs to keep correct.
+
+Note that `dj-visualizer.vercel.app` is an unrelated application and never
+served this repo.
+
+
 ## License and Attribution
 - Libraries: p5.js is used under its license (LGPL-2.1).
 - Credit the meetup and contributors where appropriate.
