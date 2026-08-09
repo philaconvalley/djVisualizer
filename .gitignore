@@ -5,3 +5,14 @@
 .claude/
 .vscode/
 node_modules/
+
+# Impeccable design tooling (local session state, not product)
+.impeccable/
+
+# Playwright scratch
+.playwright-mcp/
+
+# Verification harness artefacts. Fixtures are generated (npm run fixtures);
+# output is screenshots and a results file from the last run.
+test/fixtures/*.wav
+test/output/

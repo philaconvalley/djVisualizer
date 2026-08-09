@@ -1,0 +1,16 @@
+{
+  "name": "dj-visualizer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time audio visualizer for live DJ performance, driven by hardware input.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "fixtures": "node test/fixtures/make-audio.mjs",
+    "verify": "node test/fixtures/make-audio.mjs && node test/verify-audio.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  }
+}
