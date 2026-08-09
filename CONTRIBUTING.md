@@ -84,7 +84,16 @@ It reads the asset list from the page rather than a hard-coded list, so adding
 a file cannot escape the check. That is deliberate: a stale hard-coded list is
 what caused the original bug.
 
-It runs on every deploy and every six hours via `.github/workflows/smoke.yml`.
+It runs on every merge to `main` and every six hours via
+`.github/workflows/smoke.yml`.
+
+On a merge the job first waits until the live site is serving that exact commit,
+by polling `/build-info.json` — one small file the Netlify build writes naming
+`COMMIT_REF`. Nothing in the app reads it, and it never exists locally. It is
+there because a check that runs seconds after a merge would otherwise test the
+*previous* build and pass, which is a green light for code that was never
+checked. That is the same class of false signal the smoke check exists to
+catch, and it would have been embarrassing to build it in.
 
 **What it does not cover.** Device enumeration and DJ-hardware prioritisation,
 USB line level and gain staging, sustained thermal behaviour, and the projector.
