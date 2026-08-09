@@ -8,13 +8,13 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 ## Project Overview
 - Purpose: Real-time audio visualization for DJ sets with low-latency, hardware-first input.
 - Core concept: Bass, mid, high frequency bands visually complement each other like mixer EQ bands, unifying into a single composition.
-- Tech stack: Web Audio API + p5.js (with WEBGL), DOM-based spectrum bars.
+- Tech stack: Web Audio API + p5.js (WEBGL). All nine modes render on one canvas; an AudioWorklet handles the kick envelope on the audio thread.
 - Hardware focus: Pioneer DDJ-REV1 (priority), any DDJ/Pioneer controller. Serato Virtual Audio is not used.
 
 
 ## Architecture and File Map
 - `index.html`
-  - Loads p5.js from `vendor/` (never a CDN — the venue network is assumed hostile) and the three app scripts.
+  - Loads p5.js from `vendor/` (never a CDN — the venue network is assumed hostile) and the three app scripts. p5.asciify is gone; it was pinned to a version that never existed and had been 404ing on every page load, including the Indy Hall set.
   - Declares UI: device selector `#audioInputSelect`, transport and fullscreen buttons, visualization mode `#visualMode`, per-band sensitivity sliders, band level meters, readout, and the render container `#p5-canvas` (p5 WEBGL). Polygon Collage adds `#collage-canvas` beneath it at runtime.
 
 - `app/app.js` — `DJVisualizerApp`
@@ -199,7 +199,7 @@ Tip: You can keep the fast custom detector for responsiveness and overlay a slow
 
 
 ## License and Attribution
-- Libraries: p5.js and p5.asciify are used under their respective licenses.
+- Libraries: p5.js is used under its license (LGPL-2.1).
 - Credit the meetup and contributors where appropriate.
 
 
