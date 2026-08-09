@@ -43,11 +43,15 @@ class DJVisualizerApp {
       // kill Space and F, or the transport dies as soon as you touch a band.
       if (e.target.matches('input[type="file"], input[type="text"], textarea')) return;
 
-      // Every mode in the dropdown is reachable, in dropdown order.
-      const digit = e.code.match(/^Digit([1-9])$/);
+      // Every mode in the dropdown is reachable, in dropdown order. 1-9 then 0
+      // for the tenth, following the convention browsers use for tabs. A mode
+      // the operator cannot reach from the keyboard mid-set may as well not
+      // exist, so this has to keep pace with the dropdown.
+      const digit = e.code.match(/^Digit([0-9])$/);
       if (digit) {
         const options = document.getElementById('visualMode')?.options;
-        const opt = options?.[Number(digit[1]) - 1];
+        const position = digit[1] === '0' ? 10 : Number(digit[1]);
+        const opt = options?.[position - 1];
         if (opt) {
           e.preventDefault();
           this.switchVisualizationMode(opt.value);
@@ -341,10 +345,6 @@ class DJVisualizerApp {
     });
   }
   
-  async refreshAudioDevices() {
-    console.log('Refreshing audio device list...');
-    await this.populateAudioDevices();
-  }
   
   
   toggleFullscreen() {

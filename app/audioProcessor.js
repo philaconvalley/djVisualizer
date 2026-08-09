@@ -97,7 +97,10 @@ class AudioProcessor {
     this.envelopeQueue = [];
     this.usingWorklet = false;
     this.minBeatInterval = 300; // Minimum 300ms between beats (200 BPM max)
-    this.maxBeatInterval = 1200; // Maximum 1200ms between beats (50 BPM min)
+    // 1500ms is 40 BPM. Widened from 1200ms (50 BPM) when the octave-doubling
+    // heuristic was removed: slow tempos are now detected as themselves rather
+    // than folded up, so the valid interval range has to actually contain them.
+    this.maxBeatInterval = 1500;
     this.bpmSmoothingFactor = 0.3;
     this.dataArray = null;
     this.timeDataArray = null;
@@ -237,8 +240,7 @@ class AudioProcessor {
       // spans — which is what lets one gain slider mean the same thing on all
       // three, and lets the rail meters read as a straight percentage.
       const rms = Math.sqrt(sum / (last - first + 1));
-      const value = rms * band.trim;
-      out[band.name] = isNaN(value) ? 0 : Math.min(1, value);
+      out[band.name] = Math.min(1, rms * band.trim);
     }
 
     return out;
@@ -291,13 +293,17 @@ class AudioProcessor {
       if (this.usingWorklet) this.drainEnvelope();
       else this.detectBeat(now, this.bass);
 
-      // Notify listeners of data update with validated data
+      // The NaN guards that used to wrap every field here are gone. They were
+      // load-bearing when bandEnergy() could divide by an empty bin range;
+      // now the range is explicitly bounds-checked and the result clamped to
+      // 0..1, so a NaN would be a real bug worth seeing rather than silently
+      // flooring to zero. The tone checks in test/verify-audio.mjs cover it.
       if (this.onDataUpdate) {
         this.onDataUpdate({
-          rms: isNaN(this.rms) ? 0 : this.rms,
-          bass: isNaN(this.bass) ? 0 : this.bass,
-          mid: isNaN(this.mid) ? 0 : this.mid,
-          high: isNaN(this.high) ? 0 : this.high,
+          rms: this.rms,
+          bass: this.bass,
+          mid: this.mid,
+          high: this.high,
           spectrum: this.spectrum || [],
           bpm: this.bpm,
           // The stage draws a log-frequency spectrum, so it needs to know what
@@ -566,9 +572,19 @@ class AudioProcessor {
         const avgInterval = this.beatHistory.reduce((a, b) => a + b) / this.beatHistory.length;
         let instantBpm = 60000 / avgInterval;
 
-        // Kick patterns that skip the offbeat read at half tempo. Nothing a DJ
-        // plays through this sits below 90, so fold the low half back up.
-        if (instantBpm > 45 && instantBpm < 90) instantBpm *= 2;
+        // No octave correction. There used to be a rule doubling anything
+        // between 45 and 90 BPM, on the theory that a kick skipping the offbeat
+        // reads at half tempo. It cannot distinguish that case from a track
+        // genuinely at 85, so it corrupted real music: measured against a
+        // generated 85 BPM pattern it reported 171. Hip-hop, half-time and
+        // downtempo all live in the range it rewrote.
+        //
+        // Removing it is safe because the adaptive detector no longer needs
+        // rescuing — measured against generated patterns it now reads 85 as 85,
+        // 128 as 129 and 174 as 174, including the fast case the heuristic
+        // existed to protect. Guarded by the tempo checks in
+        // test/verify-audio.mjs; do not reintroduce doubling without evidence
+        // from an interval histogram.
 
         this.bpm = Math.round(
           this.bpm === 0

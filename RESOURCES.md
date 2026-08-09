@@ -8,7 +8,7 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 ## Project Overview
 - Purpose: Real-time audio visualization for DJ sets with low-latency, hardware-first input.
 - Core concept: Bass, mid, high frequency bands visually complement each other like mixer EQ bands, unifying into a single composition.
-- Tech stack: Web Audio API + p5.js (WEBGL). All nine modes render on one canvas; an AudioWorklet handles the kick envelope on the audio thread.
+- Tech stack: Web Audio API + p5.js (WEBGL). All ten modes render on one canvas; an AudioWorklet handles the kick envelope on the audio thread.
 - Hardware focus: Pioneer DDJ-REV1 (priority), any DDJ/Pioneer controller. Serato Virtual Audio is not used.
 
 
@@ -27,14 +27,15 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
   - Manages Web Audio API graph and analysis.
   - Responsibilities: device listing, input selection, analyser configuration, spectrum/time-domain capture, band energy calculation, RMS, beat and BPM detection.
   - Functions to note: `listInputs()`, `startAudio(deviceId)`, `stop()`, `updateAudioData()`, `detectBeat(now, energy)`, `bandEnergy(spec, sampleRate)`, `drainEnvelope()`, `getAudioData()`.
+  - No octave correction. Tempo is reported as detected; the rule that doubled anything between 45 and 90 BPM was removed after it turned a generated 85 BPM pattern into 171. `maxBeatInterval` is 1500 ms (40 BPM) so slow tempos land in the valid range instead of being folded up.
   - Band bounds live in the module-level `BANDS` table in real hertz, and both the analyser and the stage read from it. It is the single source of truth for where bass ends and mid begins.
   - Design choices: FFT size 2048 (≈23 Hz bins, so the 20–250 Hz band resolves in about ten of them), disabled echoCancellation/noiseSuppression/autoGainControl for DJ-grade input.
   - Two clocks, deliberately. Analysis runs on a fixed `setInterval`, not chained to `requestAnimationFrame`, so a heavy visualization cannot throttle listening. Beat detection runs further out still, in an `AudioWorklet` on the audio thread, posting timestamped kick-envelope samples that the main thread drains in batches — measured under load, the main thread can fall to single-digit hertz, which is fewer samples than there are beats.
 
 - `app/visualizer.js` — `DJVisualizer`
-  - Renders all nine modes on one p5 WEBGL canvas in `#p5-canvas`. Polygon Collage additionally paints into a 2D `#collage-canvas` underneath, because it accumulates rather than clearing.
+  - Renders all ten modes on one p5 WEBGL canvas in `#p5-canvas`. Polygon Collage additionally paints into a 2D `#collage-canvas` underneath, because it accumulates rather than clearing.
   - All modes share one grammar — CSS band tokens for colour, stacked emissive passes for light, one response curve, one idle breath, beat-phase timing, and a composition box that clears the console rail. The file header states it in full; `DESIGN.md` explains why.
-  - Functions to note: `init()`, `updateAudioData(data)`, `onBeatEvent()`, `draw(p)`, `level(v)`, `band(name)`, `emissiveStroke(...)`, `emissiveDot(...)`, `drawSpectrum()`, `drawParticleField()`, `drawFrequencyRings()`, `drawWaveforms()`, `drawMandala()`, `drawTunnel()`, `drawGalaxy()`, `drawPolygonCollage()`, `drawCustomMedia()`.
+  - Functions to note: `init()`, `updateAudioData(data)`, `onBeatEvent()`, `draw(p)`, `level(v)`, `band(name)`, `emissiveStroke(...)`, `emissiveDot(...)`, `drawSpectrum()`, `drawParticleField()`, `drawFrequencyRings()`, `drawWaveforms()`, `drawMandala()`, `drawTunnel()`, `drawGalaxy()`, `drawPolygonCollage()`, `drawCustomMedia()`, `drawFlow()`.
 
 - `styles/styles.css`
   - All UI styling, layout, z-index for layered DOM + p5 renders.
@@ -69,9 +70,10 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 - Keyboard
   - Space: Start/Stop Audio
   - F: Toggle Fullscreen
-  - 1–9: Switch mode, in dropdown order — Spectrum Bars, Floating Particles,
-    Frequency Rings, Wave Forms, Mandala, Tunnel Vision, Galaxy, Polygon Collage,
-    Custom Upload
+  - 1–9 then 0: Switch mode, in dropdown order — Spectrum Bars, Floating
+    Particles, Frequency Rings, Wave Forms, Mandala, Tunnel Vision, Galaxy,
+    Polygon Collage, Custom Upload, Flow. 0 selects the tenth, following the
+    convention browsers use for tabs.
   - R: Reset Gains to 1.0
   - ?: Show/Hide Help
 
@@ -103,6 +105,9 @@ Defined in `index.html` (`#visualMode`) and implemented in `DJVisualizer`.
 
 - Polygon Collage (`drawPolygonCollage`)
   - Paint lands and stays, so by the end of a track the screen is a record of what was played. Renders into `#collage-canvas`, a 2D layer beneath the transparent WEBGL one, with a very slow fade so a long set does not turn to mud.
+
+- Flow (`drawFlow`)
+  - Three layers reading as one weather system: streams travelling across the frame on per-band diagonals, a ring of nodes linked to their neighbours while their band carries energy, and stacked waves beneath. Salvaged — it was a finished mode stranded behind `drawSnakeGame`, an entry point nothing called, and was nearly deleted as dead code.
 
 - Custom Upload (`drawCustomMedia`)
   - The operator's own image, GIF, or video. Bass scales it, mid tilts it, high splits it into band-tinted copies. With nothing loaded it draws a geometric drop target — p5's WEBGL `text()` needs a font file, and fetching one at showtime is forbidden.
@@ -182,14 +187,14 @@ It cannot cover device enumeration, USB line level, thermals, or the projector.
 - Selected device not working
   - App falls back from `exact` to `ideal` deviceId. Try another input or switch back to Auto.
 - BPM seems half-time
-  - The detector attempts to double BPM between 45–90. Verify kick clarity and input level.
+  - The detector no longer doubles anything, so a half-time reading means it is genuinely locking to every other kick. Verify kick clarity and input level. Do not reintroduce octave doubling — it corrupts real 85 BPM material, and `npm run verify` asserts against it.
 - BPM reads “—” with music clearly playing
   - The kick worklet failed to start and the console will say so; detection has fallen back to the render thread, where a heavy mode can starve it. Check for a browser without `AudioWorklet`, or a page served from `file://`.
 
 
 ## Extend and Customize
 - Add a new visualization mode
-  - In `index.html` add `<option value="myMode">My Mode</option>` — keys 1–9 map to dropdown order, so position matters.
+  - In `index.html` add `<option value="myMode">My Mode</option>` — keys 1–9 then 0 map to dropdown order, so position matters, and an eleventh mode would have no shortcut at all.
   - In `DJVisualizer.draw()` add a new case `"myMode"` and implement `drawMyMode(p)`.
   - Follow the stage grammar, or the mode will look like it came from a different product. `CONTRIBUTING.md` has the checklist; the short version is: colour from `this.colors`, levels through `this.band()`, light through `emissiveStroke`/`emissiveDot`, timing off `this.phase` and `this.beat`, composition inside `this.vw` × `this.vh`.
   - Run `npm run verify` and look at your mode's screenshot in `test/output/`.

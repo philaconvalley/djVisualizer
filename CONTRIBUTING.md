@@ -50,7 +50,7 @@ real FFT, the real DOM. Only the microphone is substituted.
 
 It checks that a 100 Hz tone lights bass and nothing else, that 1 kHz lights mid,
 that 10 kHz lights high, that a 120 BPM kick pattern is detected as roughly 120,
-that all nine modes paint pixels without throwing, and that the meters return to
+that all ten modes paint pixels without throwing, and that the meters return to
 zero on stop. Screenshots of every mode land in `test/output/`.
 
 Run it before opening a pull request. It has already caught band splits that were
@@ -82,7 +82,7 @@ thing to look at, because "it looked fine" is not a check.
 5. **Watch the BPM readout over a full track.** It should settle within a few
    beats and stay there through a mix. It reads the kick from the audio thread,
    so it should hold steady even when the visuals get heavy.
-6. **Cycle all nine modes with keys 1–9 while the music plays.** Nothing should
+6. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
    stall, and the FPS readout should stay usable. Spectrum and Particles are the
    documented safe modes on a slower machine.
 7. **Go fullscreen and check the projector, not the laptop.** Confirm the console
@@ -93,8 +93,9 @@ thing to look at, because "it looked fine" is not a check.
 
 ## Adding a visualization mode
 
-1. Add an `<option>` to `#visualMode` in `index.html`. Keys 1–9 map to dropdown
-   order automatically, so position matters.
+1. Add an `<option>` to `#visualMode` in `index.html`. Keys 1–9 then 0 map to
+   dropdown order automatically, so position matters — and there are ten modes
+   already, so an eleventh would need a shortcut scheme that is not digits.
 2. Add a `case` to the switch in `DJVisualizer.draw()`.
 3. Write the draw function. It must obey the stage grammar documented in the
    header of `app/visualizer.js` and explained in `DESIGN.md`:
