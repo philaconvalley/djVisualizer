@@ -12,7 +12,6 @@ class DJVisualizer {
     this.w = 0;
     this.h = 0;
     this.currentMode = 'spectrum';
-    this.asciify = null;
     this.particles = [];
     this.time = 0;
     this.isRunning = false;
