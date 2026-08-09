@@ -1,14 +1,14 @@
 # JS DJ Audio Visualizer
 
-A web-based audio visualizer and processor for DJs, built with JavaScript. This project lets you visualize and manipulate audio in real time, making it perfect for live performances, music analysis, or just having fun with sound.
+A web-based audio visualizer for DJs, built with plain JavaScript and the Web
+Audio API. It listens to **live audio input from your hardware** — a controller,
+a mixer, or a microphone — and turns it into projected visuals in real time.
 
-Performed live at [Indy Hall](https://www.indyhall.org/) in Philadelphia, driving real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
+It does not play audio files. There is no file to load and no track to select:
+you plug in, press Start, and it reads the room.
 
-## Features
-- Real-time audio visualization
-- Audio processing and effects
-- Interactive controls for DJs
-- Modern, responsive UI
+Performed live at [Indy Hall](https://www.indyhall.org/) in Philadelphia, driving
+real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
 
 ## Demo
 
@@ -18,68 +18,111 @@ Performed live at [Indy Hall](https://www.indyhall.org/) in Philadelphia, drivin
 | --- | --- |
 | ![Spectrum bars mode](docs/screenshots/spectrum-bars.png) | ![Mandala mode](docs/screenshots/mandala-mode.png) |
 
-To see the app in action yourself, clone the repo and follow the instructions below.
+There is no hosted demo yet. Deployment configs are in the repo but nothing is
+deployed. To see it running, clone it and follow the steps below — it takes about
+a minute and needs no build.
 
-## Getting Started
+## What it does
+
+- **Live hardware input.** Enumerates audio devices and prioritises DJ
+  controllers (DDJ-REV1, then any DDJ, then Pioneer). Echo cancellation, noise
+  suppression, and automatic gain control are all deliberately disabled so
+  line-level signal from a mixer arrives unprocessed.
+- **Three-band analysis.** Bass (20–250 Hz), mid (250 Hz–4 kHz), high
+  (4–20 kHz), split by real frequency rather than by array position, with a
+  per-band sensitivity control that doubles as a live meter.
+- **Beat and BPM detection**, run on the audio thread so it holds steady when
+  the visuals get heavy.
+- **Nine visualization modes**, plus your own image, GIF, or video as a reactive
+  layer.
+- **Built for a stage**: fullscreen, keyboard shortcuts, on-screen BPM and FPS,
+  and a reduced-flashing control for photosensitivity.
+
+## Getting started
 
 ### Prerequisites
-- Node.js (for development, optional)
-- A modern web browser (Chrome, Firefox, Edge, Safari)
 
-### Installation
-1. Clone the repository:
-	 ```sh
-	 git clone https://github.com/philaconvalley/djVisualizer.git
-	 cd djVisualizer
-	 ```
-2. (Optional) Install dependencies if you plan to extend or build locally:
-	 ```sh
-	 npm install
-	 ```
+- A modern browser. Chrome is preferred for `getUserMedia` consistency and WebGL
+  performance.
+- An audio input. Any microphone works for trying it out.
+- Node.js, only if you want to run the verification suite.
 
-### Running Locally
-You can open `index.html` directly in your browser, or use a local server for best results:
+### Run it
 
 ```sh
-# Using Python 3.x
-python3 -m http.server
-# or with Node.js
-npx serve .
+git clone https://github.com/philaconvalley/djVisualizer.git
+cd djVisualizer
+python3 -m http.server 8000    # or: npx serve .
 ```
-Then visit `http://localhost:8000` (or the port shown in your terminal).
 
-## Project Structure
+Open `http://localhost:8000`, pick a source, and press Start.
+
+There is no build step and no runtime dependency to install. p5.js is vendored
+in `vendor/` on purpose — the app must never need the network at showtime.
+
+### Verify it
+
+```sh
+npm install       # devDependencies only
+npm run verify
 ```
+
+Runs the real app in Chromium against generated audio with known frequency
+content: a 100 Hz tone must light bass and nothing else, a 120 BPM kick pattern
+must read as 120, and all nine modes must paint without throwing. Screenshots
+land in `test/output/`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| <kbd>Space</kbd> | Start / stop audio |
+| <kbd>F</kbd> | Fullscreen |
+| <kbd>1</kbd>–<kbd>9</kbd> | Switch visualization mode |
+| <kbd>R</kbd> | Reset all sensitivities |
+| <kbd>?</kbd> | Show or hide the controls panel |
+
+## Photosensitivity
+
+This visualizer produces full-field luminance changes in time with the music and
+is designed to be projected. There is a **Reduce flash** control in the console;
+it turns itself on automatically if your system asks for reduced motion, and it
+can be overridden in either direction. If you are running this in front of an
+audience, leave the warning on the start screen visible until you begin.
+
+## Project structure
+
+```
+index.html              Markup, direction contract, script tags
 app/
-	app.js              # Main application logic
-	audioProcessor.js   # Audio processing and effects
-	visualizer.js       # Visualization logic
-styles/
-	styles.css          # App styles
-index.html            # Main HTML file
-netlify.toml, vercel.json # Deployment configs
+  app.js                Lifecycle, devices, controls, keyboard
+  audioProcessor.js     Web Audio graph, band analysis, beat detection
+  visualizer.js         All nine modes, one shared stage grammar
+styles/styles.css       Design tokens and console styling
+vendor/p5.min.js        Vendored p5 1.9.0 — never a CDN
+test/                   Verification harness (see CONTRIBUTING.md)
+PRODUCT.md              Users, constraints, product principles
+DESIGN.md               Visual and behavioural decisions, and why
+RESOURCES.md            Architecture reference, setup, troubleshooting
+netlify.toml, vercel.json   Deployment configs (nothing deployed yet)
 ```
-
-## Usage
-- Upload or select an audio file
-- Watch the real-time visualization
-- Use controls to manipulate playback and effects
 
 ## Contributing
-Contributions are welcome! Please open issues or submit pull requests for new features, bug fixes, or improvements.
 
-1. Fork the repo
-2. Create your feature branch (`git checkout -b feature/YourFeature`)
-3. Commit your changes (`git commit -am 'Add new feature'`)
-4. Push to the branch (`git push origin feature/YourFeature`)
-5. Open a pull request
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first —
+it covers the three constraints that shape every decision here (zero build, no
+network at showtime, and the three-band concept), how to run the verification
+suite, and how to add a visualization mode.
 
 ## License
-MIT License. See [LICENSE](LICENSE) for details.
+
+MIT. See [LICENSE](LICENSE).
 
 ## Authors
+
 - [traksaw](https://github.com/traksaw)
 
 ## Acknowledgments
+
+- Built with the Web Audio API and [p5.js](https://p5js.org/)
 - Inspired by the DJ and web audio community
-- Built with the Web Audio API and Canvas

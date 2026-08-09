@@ -14,26 +14,27 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 
 ## Architecture and File Map
 - `index.html`
-  - Loads external libraries (p5.js, p5.asciify) and app scripts.
-  - Declares UI: device selector `#audioInputSelect`, start/fullscreen buttons, visualization mode `#visualMode`, sensitivity sliders, EQ level meters, status area, two render containers: `#spectrum-visualizer` (DOM bars) and `#p5-canvas` (p5 WEBGL).
+  - Loads p5.js from `vendor/` (never a CDN — the venue network is assumed hostile) and the three app scripts.
+  - Declares UI: device selector `#audioInputSelect`, transport and fullscreen buttons, visualization mode `#visualMode`, per-band sensitivity sliders, band level meters, readout, and the render container `#p5-canvas` (p5 WEBGL). Polygon Collage adds `#collage-canvas` beneath it at runtime.
 
 - `app/app.js` — `DJVisualizerApp`
   - Coordinates lifecycle and UI: start/stop, fullscreen, device enumeration and selection, gain controls, keyboard shortcuts, FPS/BPM display.
-  - Bridges audio data from `AudioProcessor` to `DJVisualizer` via `onDataUpdate` callback.
+  - Bridges audio data from `AudioProcessor` to `DJVisualizer` via the `onDataUpdate` callback, and discrete beats via `onBeat`.
   - Functions to note: `init()`, `startAudio()`, `stopAudio()`, `populateAudioDevices()`, `switchVisualizationMode(mode)`, `updateBPM(bpm)`, `updateFPS()`.
+  - FPS is counted on the visualizer's `onFrame` hook, not on the audio callback: the analyser runs at a fixed rate and would report a steady 60 no matter how the renderer was coping.
 
 - `app/audioProcessor.js` — `AudioProcessor`
   - Manages Web Audio API graph and analysis.
-  - Responsibilities: device listing, input selection, analyser configuration, spectrum/time-domain capture, band energy calculation, RMS, lightweight beat/BPM detection.
-  - Functions to note: `listInputs()`, `startAudio(deviceId)`, `stop()`, `updateAudioData()`, `detectBeat()`, `bandEnergy(...)`, `getAudioData()`.
-  - Design choices: tuned FFT size (1024), smoothing, disabled echoCancellation/noiseSuppression/autoGainControl for DJ-grade input.
+  - Responsibilities: device listing, input selection, analyser configuration, spectrum/time-domain capture, band energy calculation, RMS, beat and BPM detection.
+  - Functions to note: `listInputs()`, `startAudio(deviceId)`, `stop()`, `updateAudioData()`, `detectBeat(now, energy)`, `bandEnergy(spec, sampleRate)`, `drainEnvelope()`, `getAudioData()`.
+  - Band bounds live in the module-level `BANDS` table in real hertz, and both the analyser and the stage read from it. It is the single source of truth for where bass ends and mid begins.
+  - Design choices: FFT size 2048 (≈23 Hz bins, so the 20–250 Hz band resolves in about ten of them), disabled echoCancellation/noiseSuppression/autoGainControl for DJ-grade input.
+  - Two clocks, deliberately. Analysis runs on a fixed `setInterval`, not chained to `requestAnimationFrame`, so a heavy visualization cannot throttle listening. Beat detection runs further out still, in an `AudioWorklet` on the audio thread, posting timestamped kick-envelope samples that the main thread drains in batches — measured under load, the main thread can fall to single-digit hertz, which is fewer samples than there are beats.
 
 - `app/visualizer.js` — `DJVisualizer`
-  - Renders visuals using p5.js (WEBGL) and DOM.
-  - Two rendering paths:
-    - DOM-based `#spectrum-visualizer` bars for the “Spectrum” mode.
-    - p5 canvas in `#p5-canvas` for creative modes (particles, rings, waves, mandala, tunnel, galaxy, polygons).
-  - Functions to note: `init()`, `updateAudioData(data)`, `draw(p)`, `updateSpectrumBars()`, `drawFloatingParticles3D()`, `drawFrequencyRings3D()`, `drawAudioWaves()`, `drawMandala()`, `drawTunnel()`, `drawGalaxy()`, `drawAudioPolygons()`.
+  - Renders all nine modes on one p5 WEBGL canvas in `#p5-canvas`. Polygon Collage additionally paints into a 2D `#collage-canvas` underneath, because it accumulates rather than clearing.
+  - All modes share one grammar — CSS band tokens for colour, stacked emissive passes for light, one response curve, one idle breath, beat-phase timing, and a composition box that clears the console rail. The file header states it in full; `DESIGN.md` explains why.
+  - Functions to note: `init()`, `updateAudioData(data)`, `onBeatEvent()`, `draw(p)`, `level(v)`, `band(name)`, `emissiveStroke(...)`, `emissiveDot(...)`, `drawSpectrum()`, `drawParticleField()`, `drawFrequencyRings()`, `drawWaveforms()`, `drawMandala()`, `drawTunnel()`, `drawGalaxy()`, `drawPolygonCollage()`, `drawCustomMedia()`.
 
 - `styles/styles.css`
   - All UI styling, layout, z-index for layered DOM + p5 renders.
@@ -78,12 +79,12 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 ## Visualization Modes
 Defined in `index.html` (`#visualMode`) and implemented in `DJVisualizer`.
 
-- Spectrum Bars (`currentMode = "spectrum"`)
-  - DOM-driven bars in `#spectrum-visualizer` driven by `spectrum` data.
-  - Always-on EQ meters (bass/mid/high) act as quick signal check.
+- Spectrum Bars (`drawSpectrum`)
+  - 88 log-spaced bars across 20 Hz–20 kHz, coloured by which band each bar's centre frequency falls in, with peak-hold marks above them. Log spacing matters: linear FFT bins spend most of the screen above 4 kHz and squash every kick and vocal into the leftmost inch.
+  - Always-on band meters in the rail (bass/mid/high) act as a quick signal check.
 
-- Floating Particles (`drawFloatingParticles3D`)
-  - 3D particle field with frequency-colored spheres. Bass/mid/high impact movement, size, and alpha.
+- Floating Particles (`drawParticleField`)
+  - 3D particle field of billboarded emissive discs, sorted back to front. Depth carries the band: bass far and heavy, highs near and quick.
 
 - Frequency Rings (`drawFrequencyRings3D`)
   - Rotating rings with band-specific color/intensity and audio-driven radius/thickness.
