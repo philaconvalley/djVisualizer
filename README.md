@@ -76,7 +76,16 @@ Runs the real app in Chromium against generated audio with known frequency
 content: a 100 Hz tone must light bass and nothing else, a 120 BPM kick pattern
 must read as 120, tempo must stay octave-correct from 85 to 174, and all ten
 modes must paint without throwing. Screenshots
-land in `test/output/`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+land in `test/output/`.
+
+```sh
+npm run smoke      # or: npm run smoke -- https://some-deploy-preview
+```
+
+Checks that the *deployed* app actually loads — that every script and
+stylesheet the page references comes back as that kind of file, rather than as
+`index.html` with a 200. Runs automatically on every deploy and every six hours.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Controls
 

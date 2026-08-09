@@ -1,0 +1,69 @@
+# Asks whether the deployed app actually loads, which is a different question
+# from whether the deployment succeeded. The host reported success for two pull
+# requests while serving a site with no p5 on it.
+name: Deploy smoke check
+
+on:
+  # The important trigger: fires when a host reports a successful deploy, and
+  # checks the URL that was just deployed — turning "deployment completed" into
+  # "deployment completed and the page loads". Depends on the Netlify GitHub
+  # integration emitting Deployment events; the schedule below covers us if it
+  # does not.
+  deployment_status:
+
+  # Production drift, expired certificates, an outage nobody noticed.
+  schedule:
+    - cron: '0 */6 * * *'
+
+  # Run it by hand against any URL, including a deploy preview.
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Base URL to check'
+        required: false
+        default: 'https://dj-visualizer.netlify.app'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # deployment_status fires for every state; only a success is worth checking.
+    if: github.event_name != 'deployment_status' || github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "deployment_status" ]; then
+            URL="${{ github.event.deployment_status.environment_url }}"
+          else
+            URL="${{ inputs.url || 'https://dj-visualizer.netlify.app' }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "No URL to check; the deployment reported no environment_url."
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Checking $URL"
+
+      # A deploy can report success a moment before the CDN serves the new
+      # build. Retry rather than fail on a race — a flaky check gets ignored,
+      # and an ignored check is worth nothing.
+      - name: Smoke check
+        run: |
+          for attempt in 1 2 3; do
+            if node test/smoke-deploy.mjs "${{ steps.target.outputs.url }}"; then
+              exit 0
+            fi
+            echo "::warning::Attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Deployed app failed the smoke check at ${{ steps.target.outputs.url }}"
+          exit 1
