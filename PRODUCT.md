@@ -66,11 +66,14 @@ Two further defects surfaced only once the app was run against real audio, and b
 
 - **Real performance history:** performed live at Indy Hall, Philadelphia, on a Pioneer DDJ-REV1 before an audience. This is a factual claim and may be stated.
 - **Real screenshots and a demo GIF:** `docs/screenshots/` contains `demo.gif`, `galaxy-mode.png`, `mandala-mode.png`, `spectrum-bars.png`.
+- **A live hosted build:** `https://dj-visualizer.netlify.app`, tracking `main`.
 - **Real technical documentation:** `RESOURCES.md` is accurate and is the authority for architecture, setup, troubleshooting, and learning resources. Design work must not duplicate its content.
 
 - **A verification suite with real audio:** `npm run verify` runs the app in Chromium against generated WAV files through the fake audio device. Every layer below the physical microphone is the production path. 38 checks, covering band separation against known tones, BPM against a known pattern, and all nine modes rendering without throwing. Screenshots of every mode land in `test/output/`.
 
-**Absences future work must not fabricate:** there is still no hosted demo URL (deployment configs exist but nothing is deployed — PHI-162). There are no users, no testimonials, no adoption metrics, and no benchmarks. The Founders Alley activation is agreed in principle only: unscoped, unpaid, and sponsorship-contingent.
+**A hosted build does exist**, contrary to what this file previously recorded: `https://dj-visualizer.netlify.app`, deployed from `main`, with Netlify also building a preview per pull request. PHI-162 was written against a stale reading and should be re-scoped to whatever it was actually meant to cover — a custom domain, or promoting the URL — rather than closed as "deploy the app".
+
+**Absences future work must not fabricate:** there are no users, no testimonials, no adoption metrics, and no benchmarks. The Founders Alley activation is agreed in principle only: unscoped, unpaid, and sponsorship-contingent.
 
 **The app has still never run against the DDJ-REV1 since this redesign.** The automated suite substitutes the microphone, so device enumeration and DJ prioritisation, USB line level and gain staging, sustained thermal behaviour, and the projector are all unverified. `CONTRIBUTING.md` carries the eight-step hardware checklist that closes it; it takes about twenty minutes and should happen before anything is promised to Founders Alley.
 
