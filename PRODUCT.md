@@ -71,7 +71,7 @@ Two further defects surfaced only once the app was run against real audio, and b
 
 - **A verification suite with real audio:** `npm run verify` runs the app in Chromium against generated WAV files through the fake audio device. Every layer below the physical microphone is the production path. 38 checks, covering band separation against known tones, BPM and octave correctness against known patterns from 85 to 174 BPM, and all ten modes rendering without throwing. Screenshots of every mode land in `test/output/`.
 
-**A hosted build does exist**, contrary to what this file previously recorded: `https://dj-visualizer.netlify.app`, deployed from `main`, with Netlify also building a preview per pull request. PHI-162 was written against a stale reading and should be re-scoped to whatever it was actually meant to cover — a custom domain, or promoting the URL — rather than closed as "deploy the app".
+**A hosted build does exist**, contrary to what this file previously recorded: `https://dj-visualizer.netlify.app`, deployed from `main`, with Netlify also building a preview per pull request. **Netlify is the single source of truth for hosting** — decided 2026-08-09. The repo previously also carried a `vercel.json`, which meant two deployment targets from one commit and one of them silently broken; that config has been removed. PHI-162 was written against a stale reading and should be re-scoped to whatever it was actually meant to cover — a custom domain, or promoting the URL — rather than closed as "deploy the app".
 
 **Absences future work must not fabricate:** there are no users, no testimonials, no adoption metrics, and no benchmarks. The Founders Alley activation is agreed in principle only: unscoped, unpaid, and sponsorship-contingent.
 
