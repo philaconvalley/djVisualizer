@@ -16,3 +16,6 @@ node_modules/
 # output is screenshots and a results file from the last run.
 test/fixtures/*.wav
 test/output/
+
+# Written by the Netlify build so CI can tell which commit is live.
+build-info.json
