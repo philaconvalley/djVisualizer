@@ -1,4 +1,4 @@
-# JS DJ Audio Visualizer
+# DJ Visualizer
 
 A web-based audio visualizer for DJs, built with plain JavaScript and the Web
 Audio API. It listens to **live audio input from your hardware** — a controller,
@@ -12,11 +12,15 @@ real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
 
 ## Demo
 
-![Galaxy visualization mode reacting to audio](docs/screenshots/demo.gif)
+![Flow mode reacting to a 128 BPM kick pattern](docs/screenshots/demo.gif)
 
 | Spectrum Bars | Mandala |
 | --- | --- |
 | ![Spectrum bars mode](docs/screenshots/spectrum-bars.png) | ![Mandala mode](docs/screenshots/mandala-mode.png) |
+
+<sub>Captured by the verification suite against a generated test signal, which is
+why the source reads "Fake Audio Input 1". Real hardware captures replace these
+after the next DDJ check.</sub>
 
 **Live build: [dj-visualizer.netlify.app](https://dj-visualizer.netlify.app)** —
 deployed from `main`. It needs an audio input and microphone permission; with no
@@ -104,6 +108,7 @@ styles/styles.css       Design tokens and console styling
 vendor/p5.min.js        Vendored p5 1.9.0 — never a CDN
 docs/screenshots/       Demo GIF and mode screenshots used by this README
 test/                   Verification harness (see CONTRIBUTING.md)
+package.json            devDependencies and scripts for the harness only
 LICENSE                 MIT
 CONTRIBUTING.md         Constraints, verification, how to add a mode
 PRODUCT.md              Users, constraints, product principles
