@@ -14,7 +14,7 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 
 ## Architecture and File Map
 - `index.html`
-  - Loads external libraries (p5.js, p5.asciify) and app scripts.
+  - Loads p5.js and the app scripts.
   - Declares UI: device selector `#audioInputSelect`, start/fullscreen buttons, visualization mode `#visualMode`, sensitivity sliders, EQ level meters, status area, two render containers: `#spectrum-visualizer` (DOM bars) and `#p5-canvas` (p5 WEBGL).
 
 - `app/app.js` — `DJVisualizerApp`
@@ -198,7 +198,7 @@ Tip: You can keep the fast custom detector for responsiveness and overlay a slow
 
 
 ## License and Attribution
-- Libraries: p5.js and p5.asciify are used under their respective licenses.
+- Libraries: p5.js is used under its license (LGPL-2.1).
 - Credit the meetup and contributors where appropriate.
 
 
