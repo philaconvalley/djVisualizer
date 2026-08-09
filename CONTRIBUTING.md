@@ -57,6 +57,35 @@ Run it before opening a pull request. It has already caught band splits that wer
 off by an order of magnitude and a beat detector that starved under render load —
 neither of which was visible by looking at the app.
 
+### Checking the deployed site
+
+```sh
+npm run smoke                                    # the live site
+npm run smoke -- https://deploy-preview-9--dj-visualizer.netlify.app
+```
+
+Two different questions, and it is worth keeping them apart:
+
+- `npm run verify` asks **does the code work** — real audio, real FFT, real
+  render, in a local browser.
+- `npm run smoke` asks **does the deployed site work** — which is not the same
+  thing, and not something the host will tell you. A deploy reporting success
+  says only that a build finished.
+
+The smoke check loads the page, reads out every script and stylesheet it
+actually references, and fetches each one. The assertion that matters is that
+the response is not `index.html`: a host with a catch-all rewrite answers a
+missing asset with the page and a 200, so the status looks healthy while the
+browser gets HTML where it wanted a script and dies on `Unexpected token '<'`.
+That is a real bug this repo shipped, and it survived two pull requests because
+every check was green.
+
+It reads the asset list from the page rather than a hard-coded list, so adding
+a file cannot escape the check. That is deliberate: a stale hard-coded list is
+what caused the original bug.
+
+It runs on every deploy and every six hours via `.github/workflows/smoke.yml`.
+
 **What it does not cover.** Device enumeration and DJ-hardware prioritisation,
 USB line level and gain staging, sustained thermal behaviour, and the projector.
 Those still need the controller in the room; see the checklist below.
