@@ -73,3 +73,10 @@ writeWav('tone-100hz.wav', tone(100, 6));    // squarely inside 20–250
 writeWav('tone-1khz.wav', tone(1000, 6));    // squarely inside 250–4k
 writeWav('tone-10khz.wav', tone(10000, 6));  // squarely inside 4k–20k
 writeWav('kick-120bpm.wav', kickPattern(120, 12));
+
+// Three tempos with a right answer, chosen to pin the octave behaviour. 85 is
+// the hip-hop/half-time case a naive doubling heuristic corrupts; 174 is the
+// fast case such a heuristic exists to rescue, and must survive without it.
+writeWav('kick-85bpm.wav', kickPattern(85, 24));
+writeWav('kick-128bpm.wav', kickPattern(128, 24));
+writeWav('kick-174bpm.wav', kickPattern(174, 24));

@@ -53,7 +53,7 @@ The mapping bass / mid / high is **fixed by the product**; the hues are tokens.
 
 These are Apple's dark-mode system colors, chosen for fidelity to the pin rather than invented. **Open question:** they land close to pure RGB primaries, which is the one quality the incumbent palette had that this work set out to replace. Flagged to the user and not yet resolved.
 
-**The bands must appear on the stage, not only in the rail, and in all nine modes.** The canvas reads the `--bass` / `--mid` / `--high` tokens at startup via `getComputedStyle` and never hard-codes a hue. One source of truth, so a brand kit swap moves the rail and the stage together. Band membership on the stage comes from the analyser's own `BANDS` table in real hertz, so the two surfaces cannot disagree about where mid ends.
+**The bands must appear on the stage, not only in the rail, and in all ten modes.** The canvas reads the `--bass` / `--mid` / `--high` tokens at startup via `getComputedStyle` and never hard-codes a hue. One source of truth, so a brand kit swap moves the rail and the stage together. Band membership on the stage comes from the analyser's own `BANDS` table in real hertz, so the two surfaces cannot disagree about where mid ends.
 
 This replaces an earlier arrangement in which the eight canvas modes each carried their own RGB triples, and Polygon Collage reached for pure red, green, blue, yellow, cyan, magenta and white — on the one mode the documented meetup demo ends on.
 
@@ -131,7 +131,7 @@ in `app/visualizer.js`:
 | --- | --- | --- |
 | **One palette** | Colour is read from the CSS band tokens at startup. Nothing on the stage is saturated unless it is a band. | `readPalette()`, `this.colors` |
 | **Light, not ink** | Emissive elements draw as three stacked passes — wide and faint under tight and bright. | `emissiveStroke()`, `emissiveDot()` |
-| **One response law** | Every mode reads levels through one curve, so all nine react to the same music with the same sensitivity. | `level()`, `band()` |
+| **One response law** | Every mode reads levels through one curve, so all ten react to the same music with the same sensitivity. | `level()`, `band()` |
 | **Honest silence** | No mode fabricates motion when there is no signal. Silence is one shared slow breath. | `idle` |
 | **Musical time** | Motion is driven by beat phase re-anchored on real detected beats, not by wall clock. | `phase`, `beat`, `onBeatEvent()` |
 | **Composition above the rail** | The console is always visible, so the composition box is the canvas minus the measured rail height. | `applySafeArea()`, `setRailHeight()` |
@@ -141,7 +141,7 @@ Apple's dark register, where surfaces read as physical and layered. Nine modes
 drawing 2px flat strokes read as a 2010 canvas demo whatever the palette. Three
 alpha-stacked passes under additive blending give every element a core and a
 halo, which is what a bloom shader would do — and the zero-build constraint
-forbids a shader. It is roughly ten lines and it is what makes the nine modes
+forbids a shader. It is roughly ten lines and it is what makes the ten modes
 look like one product.
 
 **Why "honest silence" is a design decision and not a bug fix.** Every mode
@@ -150,12 +150,12 @@ input looked like a loud room. The craft bar is Logic, Ableton, Serato; none of
 them invent a reading. A meter that lies under pressure is worse than one that
 reads zero, and this is a tool whose whole job is to be trusted in a booth.
 
-**Reduction applies to the chrome, not the catalogue.** Nine modes were kept.
+**Reduction applies to the chrome, not the catalogue.** Nine modes were kept, and a tenth — Flow — was recovered from dead code and rebuilt into the grammar.
 Radiooooo itself sits on an enormous catalogue behind three controls — the
 reduction target governs how many *controls* exist, and the mode dropdown is one
 control whether it holds three options or nine. Cutting modes would also have
 broken the seven-step demo ritual recorded in `RESOURCES.md`, which is a real
-usage scene. What the direction demanded was not fewer modes but that all nine
+usage scene. What the direction demanded was not fewer modes but that all of them
 actually receive it.
 
 **Spectrum Bars moved to the canvas.** It was 256 DOM nodes restyled sixty times
@@ -207,7 +207,7 @@ Hover is gated behind `@media (hover: hover) and (pointer: fine)` so touch does 
 
 ## Open decisions
 
-1. **Band hues** — Apple system colors read close to pure RGB primaries. Unresolved with the user. Now more visible than it was: the hues appear across all nine canvas modes rather than only in the rail, so if they are going to change, changing them is a one-line token edit and costs nothing. Screenshots of every mode are in `test/output/` after `npm run verify`, which is the fastest way to judge it.
+1. **Band hues** — Apple system colors read close to pure RGB primaries. Unresolved with the user. Now more visible than it was: the hues appear across all ten canvas modes rather than only in the rail, so if they are going to change, changing them is a one-line token edit and costs nothing. Screenshots of every mode are in `test/output/` after `npm run verify`, which is the fastest way to judge it.
 2. **PhilaCon Valley brand kit** — not yet binding; tokens are structured for a clean swap.
 3. ~~**p5.js still loads from a CDN**~~ — resolved. p5 1.9.0 is vendored in `vendor/`.
 

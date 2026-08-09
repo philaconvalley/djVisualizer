@@ -159,6 +159,23 @@ async function beatTest() {
   });
 }
 
+// Tempo accuracy across the range, and specifically the octave behaviour.
+// An earlier build doubled anything between 45 and 90 BPM, so 85 reported 171;
+// these assertions exist so that cannot come back unnoticed.
+async function tempoTest(wav, bpm) {
+  console.log(`\n${bpm} BPM kick pattern`);
+  await withAudio(wav, async (page, errors) => {
+    await page.waitForTimeout(14000);
+    const state = await read(page);
+    const off = Math.abs(state.bpm - bpm);
+    console.log(`        detected=${state.bpm} (off by ${off})`);
+    check(`${bpm} BPM detected within 6`, off <= 6, `detected ${state.bpm}`);
+    check(`${bpm} BPM not octave-shifted`, state.bpm < bpm * 1.5 && state.bpm > bpm * 0.6,
+      `detected ${state.bpm}`);
+    check(`${bpm} BPM pass raises no page errors`, errors.length === 0, errors[0] || 'clean');
+  });
+}
+
 async function modeTest() {
   console.log('\nAll nine modes, rendering against the 120 BPM pattern');
   await mkdir(OUT, { recursive: true });
@@ -167,7 +184,7 @@ async function modeTest() {
     const modes = await page.$$eval('#visualMode option', opts =>
       opts.map(o => ({ value: o.value, label: o.textContent.trim() })));
 
-    check('nine modes are offered', modes.length === 9, `${modes.length} found`);
+    check('ten modes are offered', modes.length === 10, `${modes.length} found`);
 
     for (const mode of modes) {
       const before = errors.length;
@@ -250,6 +267,9 @@ try {
   await bandTest('tone-1khz.wav', 'mid', 1000);
   await bandTest('tone-10khz.wav', 'high', 10000);
   await beatTest();
+  await tempoTest('kick-85bpm.wav', 85);
+  await tempoTest('kick-128bpm.wav', 128);
+  await tempoTest('kick-174bpm.wav', 174);
   await modeTest();
   await silenceTest();
 } finally {

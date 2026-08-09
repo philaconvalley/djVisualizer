@@ -38,7 +38,7 @@ Neighboring projects are overwhelmingly file-playback visualizers built as brows
 
 ## Capabilities and Constraints
 
-**Confirmed capabilities:** live audio device enumeration and selection with DJ-hardware prioritization; FFT spectrum and time-domain analysis; three-band energy extraction; beat and BPM detection; nine visualization modes plus user-uploaded image/GIF/video as a reactive layer; per-band sensitivity gain; fullscreen; keyboard shortcuts; on-screen BPM and FPS readouts.
+**Confirmed capabilities:** live audio device enumeration and selection with DJ-hardware prioritization; FFT spectrum and time-domain analysis; three-band energy extraction; beat and BPM detection; ten visualization modes plus user-uploaded image/GIF/video as a reactive layer; per-band sensitivity gain; fullscreen; keyboard shortcuts; on-screen BPM and FPS readouts.
 
 **Zero-build is a binding architectural constraint.** No bundler, no build step, no runtime npm dependencies. The app is `index.html` plus three scripts and a stylesheet, served statically. This is deliberate and protective: there is no build that can fail before a set. Any design work must not introduce a required build step. Dev tooling in `devDependencies` is acceptable; a compile stage between source and running app is not.
 
@@ -69,7 +69,7 @@ Two further defects surfaced only once the app was run against real audio, and b
 - **A live hosted build:** `https://dj-visualizer.netlify.app`, tracking `main`.
 - **Real technical documentation:** `RESOURCES.md` is accurate and is the authority for architecture, setup, troubleshooting, and learning resources. Design work must not duplicate its content.
 
-- **A verification suite with real audio:** `npm run verify` runs the app in Chromium against generated WAV files through the fake audio device. Every layer below the physical microphone is the production path. 38 checks, covering band separation against known tones, BPM against a known pattern, and all nine modes rendering without throwing. Screenshots of every mode land in `test/output/`.
+- **A verification suite with real audio:** `npm run verify` runs the app in Chromium against generated WAV files through the fake audio device. Every layer below the physical microphone is the production path. 38 checks, covering band separation against known tones, BPM and octave correctness against known patterns from 85 to 174 BPM, and all ten modes rendering without throwing. Screenshots of every mode land in `test/output/`.
 
 **A hosted build does exist**, contrary to what this file previously recorded: `https://dj-visualizer.netlify.app`, deployed from `main`, with Netlify also building a preview per pull request. PHI-162 was written against a stale reading and should be re-scoped to whatever it was actually meant to cover — a custom domain, or promoting the URL — rather than closed as "deploy the app".
 

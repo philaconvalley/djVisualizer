@@ -10,7 +10,7 @@
  *   2. Light, not ink. Emissive elements draw as stacked passes — wide and
  *      faint under tight and bright — which is what a shader would do if the
  *      zero-build constraint allowed one.
- *   3. One response law. Every mode reads levels through level(), so all nine
+ *   3. One response law. Every mode reads levels through level(), so all ten
  *      react to the same music with the same sensitivity.
  *   4. Honest silence. No mode fabricates motion with sin(time) when there is
  *      no signal. Silence is one shared slow breath, identical everywhere.
@@ -259,7 +259,7 @@ class DJVisualizer {
     this.beat = Math.min(this.beat, this.flashIntensity);
   }
 
-  // One response law for all nine modes. The gamma lifts quiet detail so the
+  // One response law for all ten modes. The gamma lifts quiet detail so the
   // stage still moves at conversational volume; the clamp stops a hot mixer
   // from pinning every mode to its maximum at once.
   level(value) {
@@ -361,6 +361,7 @@ class DJVisualizer {
       case 'mandala': this.drawMandala(p); break;
       case 'tunnel': this.drawTunnel(p); break;
       case 'galaxy': this.drawGalaxy(p); break;
+      case 'flow': this.drawFlow(p); break;
       case 'polygons': this.drawPolygonCollage(); break;
       case 'custom': this.drawCustomMedia(p); break;
       default: this.drawParticleField(p);
@@ -706,6 +707,126 @@ class DJVisualizer {
     this.emissiveDot(p, this.colors.bass,
       70 + core * 150 + this.beat * 40,
       reach * (0.06 + core * 0.09));
+  }
+
+  /* Flow — the three bands as one weather system.
+   *
+   * Salvaged rather than written. This was a finished mode stranded behind
+   * `drawSnakeGame`, an entry point nothing called, and it was very nearly
+   * deleted with the snake remnants around it. Three layers that read as one
+   * field: streams travelling across the frame, a ring of connected nodes, and
+   * stacked waves underneath.
+   *
+   * Restored into the grammar rather than pasted back — the original used
+   * hard-coded alpha ramps, flat 2px strokes, lit spheres, and `sin(time)`
+   * fallbacks, none of which the other nine modes are allowed. What survives is
+   * its composition, which was the part worth keeping.
+   */
+  drawFlow(p) {
+    const bands = ['bass', 'mid', 'high'];
+    const levels = { bass: this.band('bass'), mid: this.band('mid'), high: this.band('high') };
+
+    this.drawFlowStreams(p, bands, levels);
+    this.drawFlowNodes(p, bands, levels);
+    this.drawFlowWaves(p, bands, levels);
+  }
+
+  // Streams travelling across the frame, one set per band, each band crossing
+  // on its own diagonal so the three read as separate currents in one system.
+  drawFlowStreams(p, bands, levels) {
+    const STREAMS = 3;
+    const STEPS = 48;
+    const paths = {
+      bass: { from: this.vh * 0.22, to: -this.vh * 0.22, reverse: false, rate: 1.6, sway: 0.42 },
+      mid: { from: 0, to: 0, reverse: false, rate: 2.2, sway: 0.5 },
+      high: { from: -this.vh * 0.22, to: this.vh * 0.22, reverse: true, rate: 3.0, sway: 0.34 }
+    };
+
+    for (let stream = 0; stream < STREAMS; stream++) {
+      const offset = (stream / STREAMS) * Math.PI * 2;
+
+      for (const name of bands) {
+        const lit = levels[name];
+        const path = paths[name];
+        const drift = this.phase * Math.PI * 2 + offset;
+
+        this.emissiveStroke(p, this.colors[name], 60 + lit * 165, 1.3 + lit * 2.2, () => {
+          p.beginShape();
+          for (let i = 0; i <= STEPS; i++) {
+            const t = i / STEPS;
+            const along = path.reverse ? 1 - t : t;
+            const x = (along - 0.5) * this.vw +
+              Math.sin(this.time * path.rate + offset + t * 5) * lit * this.vw * 0.05;
+            const y = path.from + (path.to - path.from) * t +
+              Math.cos(this.time * path.rate * 0.7 + offset + t * 4) * lit * this.vh * path.sway * 0.2;
+            p.vertex(x, y);
+          }
+          p.endShape();
+        });
+      }
+    }
+  }
+
+  // A ring of nodes, thirds coloured by band, each linked to its neighbours
+  // while its band is carrying energy. The links are the point: they are what
+  // makes three separate readings look like one connected system.
+  drawFlowNodes(p, bands, levels) {
+    const NODES = 12;
+    const radius = Math.min(this.vw, this.vh) * 0.3;
+    const spin = this.phase * Math.PI * 0.5;
+
+    for (let i = 0; i < NODES; i++) {
+      const name = bands[Math.min(2, Math.floor((i / NODES) * 3))];
+      const lit = levels[name];
+      const rgb = this.colors[name];
+
+      const angle = (i / NODES) * Math.PI * 2 + spin;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+
+      // Links first, so the nodes sit on top of their own connections.
+      if (lit > 0.08) {
+        const next = (i + 1) % NODES;
+        const nextAngle = (next / NODES) * Math.PI * 2 + spin;
+        this.emissiveStroke(p, rgb, 40 + lit * 110, 0.8 + lit * 2, () => {
+          p.line(x, y, Math.cos(nextAngle) * radius, Math.sin(nextAngle) * radius);
+        });
+      }
+
+      p.push();
+      p.translate(x, y, 0);
+      this.emissiveDot(p, rgb, 70 + lit * 170, 5 + lit * 20 + this.beat * 5);
+      p.pop();
+    }
+  }
+
+  // Stacked waves under the ring. Two layers rather than the original three:
+  // the emissive passes trebled the line count, and the field reads better with
+  // room to breathe than it did filled.
+  drawFlowWaves(p, bands, levels) {
+    const POINTS = 40;
+    const rows = { bass: this.vh * 0.3, mid: this.vh * 0.02, high: -this.vh * 0.3 };
+
+    for (let layer = 0; layer < 2; layer++) {
+      const phase = layer * 0.4;
+
+      for (const name of bands) {
+        const lit = levels[name];
+        const baseY = rows[name] - layer * this.vh * 0.035;
+        const amp = lit * this.vh * 0.11;
+
+        this.emissiveStroke(p, this.colors[name], (45 + lit * 120) * (1 - layer * 0.3), 1.1 + lit * 1.6, () => {
+          p.beginShape();
+          for (let i = 0; i < POINTS; i++) {
+            const x = ((i / (POINTS - 1)) - 0.5) * this.vw;
+            const wave = Math.sin(i * 0.25 + this.time * 2.5 + phase) * amp;
+            const flow = Math.cos(i * 0.18 + this.time * 3.2) * amp * 0.35;
+            p.vertex(x, baseY + wave + flow);
+          }
+          p.endShape();
+        });
+      }
+    }
   }
 
   /* Polygon Collage — the set accumulating into one image.

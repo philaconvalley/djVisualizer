@@ -1,4 +1,4 @@
-# JS DJ Audio Visualizer
+# DJ Visualizer
 
 A web-based audio visualizer for DJs, built with plain JavaScript and the Web
 Audio API. It listens to **live audio input from your hardware** — a controller,
@@ -12,11 +12,15 @@ real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
 
 ## Demo
 
-![Galaxy visualization mode reacting to audio](docs/screenshots/demo.gif)
+![Flow mode reacting to a 128 BPM kick pattern](docs/screenshots/demo.gif)
 
 | Spectrum Bars | Mandala |
 | --- | --- |
 | ![Spectrum bars mode](docs/screenshots/spectrum-bars.png) | ![Mandala mode](docs/screenshots/mandala-mode.png) |
+
+<sub>Captured by the verification suite against a generated test signal, which is
+why the source reads "Fake Audio Input 1". Real hardware captures replace these
+after the next DDJ check.</sub>
 
 **Live build: [dj-visualizer.netlify.app](https://dj-visualizer.netlify.app)** —
 deployed from `main`. It needs an audio input and microphone permission; with no
@@ -34,7 +38,7 @@ hardware, run it locally with the steps below.
   per-band sensitivity control that doubles as a live meter.
 - **Beat and BPM detection**, run on the audio thread so it holds steady when
   the visuals get heavy.
-- **Nine visualization modes**, plus your own image, GIF, or video as a reactive
+- **Ten visualization modes**, plus your own image, GIF, or video as a reactive
   layer.
 - **Built for a stage**: fullscreen, keyboard shortcuts, on-screen BPM and FPS,
   and a reduced-flashing control for photosensitivity.
@@ -70,7 +74,8 @@ npm run verify
 
 Runs the real app in Chromium against generated audio with known frequency
 content: a 100 Hz tone must light bass and nothing else, a 120 BPM kick pattern
-must read as 120, and all nine modes must paint without throwing. Screenshots
+must read as 120, tempo must stay octave-correct from 85 to 174, and all ten
+modes must paint without throwing. Screenshots
 land in `test/output/`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Controls
@@ -79,7 +84,7 @@ land in `test/output/`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | --- | --- |
 | <kbd>Space</kbd> | Start / stop audio |
 | <kbd>F</kbd> | Fullscreen |
-| <kbd>1</kbd>–<kbd>9</kbd> | Switch visualization mode |
+| <kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd> | Switch visualization mode (0 selects the tenth) |
 | <kbd>R</kbd> | Reset all sensitivities |
 | <kbd>?</kbd> | Show or hide the controls panel |
 
@@ -98,10 +103,14 @@ index.html              Markup, direction contract, script tags
 app/
   app.js                Lifecycle, devices, controls, keyboard
   audioProcessor.js     Web Audio graph, band analysis, beat detection
-  visualizer.js         All nine modes, one shared stage grammar
+  visualizer.js         All ten modes, one shared stage grammar
 styles/styles.css       Design tokens and console styling
 vendor/p5.min.js        Vendored p5 1.9.0 — never a CDN
+docs/screenshots/       Demo GIF and mode screenshots used by this README
 test/                   Verification harness (see CONTRIBUTING.md)
+package.json            devDependencies and scripts for the harness only
+LICENSE                 MIT
+CONTRIBUTING.md         Constraints, verification, how to add a mode
 PRODUCT.md              Users, constraints, product principles
 DESIGN.md               Visual and behavioural decisions, and why
 RESOURCES.md            Architecture reference, setup, troubleshooting
