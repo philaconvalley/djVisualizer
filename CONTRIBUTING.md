@@ -113,10 +113,21 @@ thing to look at, because "it looked fine" is not a check.
 3. **Start, and watch the three meters with music playing.** All three should
    move independently. If bass moves and the others sit still, the input is
    likely mono-summed or the mixer's output level is low.
-4. **Solo the bass on the mixer.** Only the bass meter should move. Then solo the
-   hats: only high should move. This is the same check the automated band tests
-   do, on the real signal chain — and it is the one that catches a wiring or
+4. **Isolate the bass on the master, then the hats.** Use the channel faders or
+   EQ kills, *not* the CUE buttons — cue routes to your headphones, while the
+   app reads the master over USB, so soloing to headphones changes nothing it
+   can see. Watch each band across the two conditions rather than within one:
+   **killing a channel must collapse its band, and isolating it must lift that
+   band several-fold.** Measured against a DDJ-REV1, bass fell from 0.274 to a
+   hard 0.000 and high rose 8.2×; anything much weaker than that is a wiring or
    channel-mapping problem the tone tests never see.
+
+   Do not expect one band to be the only one moving. The automated tone tests
+   assert a band beats the next loudest by 2.5×, which is achievable by a pure
+   sine and by nothing else: real music through a bass-only channel still puts
+   harmonics in mid, and hats carry a great deal of mid. That threshold was
+   tried here and is not passable against a real mixer even when the pipeline is
+   correct (PHI-171). Compare conditions, not bands.
 5. **Watch the BPM readout over a full track.** It should settle within a few
    beats and stay there through a mix. It reads the kick from the audio thread,
    so it should hold steady even when the visuals get heavy.
