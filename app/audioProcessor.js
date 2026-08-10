@@ -76,7 +76,21 @@ class AudioProcessor {
     
     // BPM detection properties
     this.bpm = 0;
+    // The filter runs on a float and is rounded only for the readout. Rounding
+    // the state itself re-quantised it on every update, so it never settled
+    // between two integers and could not converge on a tempo that sat there.
+    this.bpmExact = 0;
     this.beatHistory = [];
+    // Twelve intervals, reduced by median rather than mean. A mean of six had
+    // no outlier resistance: one double-trigger at the 300 ms floor dragged a
+    // 492 ms period (122 BPM) to 460 ms and reported 130. Measured against the
+    // DDJ-REV1 the readout sat at a median of 122 while spiking to 145, under
+    // light render load as much as heavy, which is this and not starvation.
+    this.beatHistoryMax = 12;
+    // Intervals that disagree with the established period, held aside rather
+    // than averaged in. A double-trigger is a one-off; a tempo change persists.
+    this.tempoChangeRun = [];
+    this.tempoTolerance = 0.25;
     this.lastBeatTime = 0;
     // Adaptive detection: a fixed threshold only works at one gain staging, and
     // the operator moves gain mid-set. The window is the reference the peak is
@@ -209,6 +223,16 @@ class AudioProcessor {
     if (pioneer) return pioneer;
     
     return null;
+  }
+
+  // Middle value of a set, which is what a tempo estimate wants: unlike a mean
+  // it is unmoved by one wrong interval, and a wrong interval is the normal
+  // failure of any threshold-based kick detector on real music.
+  static median(values) {
+    if (!values.length) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
   // Width of one FFT bin, in Hz. Everything frequency-aware derives from this
@@ -483,7 +507,9 @@ class AudioProcessor {
     this.rms = this.bass = this.mid = this.high = 0;
     this.spectrum = [];
     this.bpm = 0;
+    this.bpmExact = 0;
     this.beatHistory = [];
+    this.tempoChangeRun = [];
     this.bassWindow = [];
     this.envelopeQueue = [];
     this.lastBeatTime = 0;
@@ -565,11 +591,26 @@ class AudioProcessor {
 
     const interval = currentTime - this.lastBeatTime;
     if (interval >= this.minBeatInterval && interval <= this.maxBeatInterval) {
-      this.beatHistory.push(interval);
-      if (this.beatHistory.length > 6) this.beatHistory.shift();
+      // An interval that disagrees with the established period is not averaged
+      // in on sight. Held aside instead: if the disagreement persists it is a
+      // real tempo change and becomes the new history; if it does not, it was a
+      // second transient inside one kick and is discarded.
+      const period = this.beatHistory.length >= 3 ? AudioProcessor.median(this.beatHistory) : 0;
+      if (!period || Math.abs(interval - period) <= period * this.tempoTolerance) {
+        this.tempoChangeRun.length = 0;
+        this.beatHistory.push(interval);
+      } else {
+        this.tempoChangeRun.push(interval);
+        if (this.tempoChangeRun.length >= 3) {
+          this.beatHistory = this.tempoChangeRun.slice();
+          this.tempoChangeRun.length = 0;
+        }
+      }
+      while (this.beatHistory.length > this.beatHistoryMax) this.beatHistory.shift();
 
       if (this.beatHistory.length >= 2) {
-        const avgInterval = this.beatHistory.reduce((a, b) => a + b) / this.beatHistory.length;
+        // Median, not mean. Same data, no sensitivity to a single bad interval.
+        const avgInterval = AudioProcessor.median(this.beatHistory);
         let instantBpm = 60000 / avgInterval;
 
         // No octave correction. There used to be a rule doubling anything
@@ -586,11 +627,10 @@ class AudioProcessor {
         // test/verify-audio.mjs; do not reintroduce doubling without evidence
         // from an interval histogram.
 
-        this.bpm = Math.round(
-          this.bpm === 0
-            ? instantBpm
-            : this.bpm * (1 - this.bpmSmoothingFactor) + instantBpm * this.bpmSmoothingFactor
-        );
+        this.bpmExact = this.bpmExact === 0
+          ? instantBpm
+          : this.bpmExact * (1 - this.bpmSmoothingFactor) + instantBpm * this.bpmSmoothingFactor;
+        this.bpm = Math.round(this.bpmExact);
       }
     }
 

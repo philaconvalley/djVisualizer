@@ -67,6 +67,39 @@ function kickPattern(bpm, seconds) {
   return out;
 }
 
+// The same kick, but every Nth hit is soft enough that the detector misses it.
+// Real music does this constantly — a bar that drops the kick, a hit buried
+// under a vocal, a breakdown. A generated four-on-the-floor never does, which
+// is why every clean-pattern test passed while the readout misbehaved against
+// the DDJ-REV1 (PHI-171).
+//
+// A missed kick doubles the interval: ~984 ms where the true period is 492 ms,
+// still inside maxBeatInterval and so accepted as real. That single outlier is
+// what separates a mean from a median. Averaging six intervals, one doubled
+// interval drags the estimate from 492 ms to 574 ms and the readout reports 104
+// against a true 122. A median of the same intervals does not move at all.
+//
+// Note a ghost note does NOT reproduce this: at 122 BPM any extra transient
+// puts the following real kick inside the 300 ms guard, so the detector locks
+// onto a periodic sequence and a mean survives it. The outlier has to be a
+// missing beat, not an extra one.
+function kickPatternWithDropouts(bpm, seconds, dropEvery = 4, dropLevel = 0) {
+  const out = new Float32Array(Math.round(RATE * seconds));
+  const period = Math.round((60 / bpm) * RATE);
+  const decay = 0.09;
+
+  for (let i = 0; i < out.length; i++) {
+    const beatIndex = Math.floor(i / period);
+    const level = (beatIndex % dropEvery === dropEvery - 1) ? dropLevel : 1;
+    const intoBeat = (i % period) / RATE;
+    const envelope = Math.exp(-intoBeat / decay);
+    const body = Math.sin(2 * Math.PI * 60 * intoBeat) * envelope * 0.85 * level;
+    const bed = (Math.random() - 0.5) * 0.015;
+    out[i] = body + bed;
+  }
+  return out;
+}
+
 mkdirSync(HERE, { recursive: true });
 
 writeWav('tone-100hz.wav', tone(100, 6));    // squarely inside 20–250
@@ -80,3 +113,7 @@ writeWav('kick-120bpm.wav', kickPattern(120, 12));
 writeWav('kick-85bpm.wav', kickPattern(85, 24));
 writeWav('kick-128bpm.wav', kickPattern(128, 24));
 writeWav('kick-174bpm.wav', kickPattern(174, 24));
+
+// 122 with every fourth kick missing outright. The tempo is unremarkable on purpose: the
+// point is not the number but that the estimator survives dirty intervals.
+writeWav('kick-122bpm-dropouts.wav', kickPatternWithDropouts(122, 24));

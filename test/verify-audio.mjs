@@ -176,6 +176,41 @@ async function tempoTest(wav, bpm) {
   });
 }
 
+// Tempo against dirty intervals, which is the failure the clean patterns above
+// structurally cannot reproduce: a generated four-on-the-floor never produces a
+// spurious interval, so a fragile estimator passes every one of them.
+//
+// This asserts stability over time rather than a single reading. That is the
+// distinction that matters — measured against the DDJ-REV1 the readout's median
+// was right while it spiked ~20 BPM high several times a minute, and a test
+// that samples once would have called that correct.
+async function ghostTest(wav, bpm) {
+  console.log(`\n${bpm} BPM with every fourth kick missing → the estimator must not chase it`);
+  await withAudio(wav, async (page, errors) => {
+    await page.waitForTimeout(12000);
+
+    const series = await page.evaluate(async () => {
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        out.push(djApp.audioProcessor.bpm);
+        await new Promise(r => setTimeout(r, 250));
+      }
+      return out;
+    });
+
+    const live = series.filter(v => v > 0);
+    const sorted = [...live].sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1] ?? 0;
+    const spread = live.length ? Math.max(...live) - Math.min(...live) : 0;
+
+    console.log(`        median=${median} min=${Math.min(...live)} max=${Math.max(...live)} spread=${spread}`);
+
+    check(`dirty ${bpm} BPM lands within 8`, Math.abs(median - bpm) <= 8, `median=${median}`);
+    check(`dirty ${bpm} BPM holds steady`, spread <= 10, `spread=${spread}`);
+    check(`dirty ${bpm} BPM raises no page errors`, errors.length === 0, errors[0] || 'clean');
+  });
+}
+
 async function modeTest() {
   console.log('\nAll nine modes, rendering against the 120 BPM pattern');
   await mkdir(OUT, { recursive: true });
@@ -270,6 +305,7 @@ try {
   await tempoTest('kick-85bpm.wav', 85);
   await tempoTest('kick-128bpm.wav', 128);
   await tempoTest('kick-174bpm.wav', 174);
+  await ghostTest('kick-122bpm-dropouts.wav', 122);
   await modeTest();
   await silenceTest();
 } finally {
