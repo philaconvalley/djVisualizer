@@ -112,6 +112,7 @@ class DJVisualizer {
     this.p5Instance = new p5((p) => {
       p.setup = () => {
         this.measureStage();
+        p.pixelDensity(this.renderDensity());
         const canvas = p.createCanvas(this.w, this.h, p.WEBGL);
         canvas.parent('p5-canvas');
         p.frameRate(60);
@@ -122,6 +123,7 @@ class DJVisualizer {
 
       p.windowResized = () => {
         this.measureStage();
+        p.pixelDensity(this.renderDensity());
         p.resizeCanvas(this.w, this.h);
         this.initializeParticles();
         this.resetCollage();
@@ -129,6 +131,26 @@ class DJVisualizer {
 
       p.draw = () => this.draw(p);
     });
+  }
+
+  /* How many device pixels to render per CSS pixel.
+   *
+   * p5 defaults to displayDensity(), which is 2 on a Retina machine. On a
+   * laptop panel that is fine. Driving a 1920x1280 display it means a
+   * 3840x2560 buffer — and measured against the DDJ-REV1 (PHI-171) Spectrum
+   * Bars fell from 60 fps to 25 on exactly that jump, while every other mode
+   * held. The modes that survived draw thin strokes; Spectrum fills large
+   * rects three times over, so it is the one that runs out of fill rate first.
+   *
+   * The detail is wasted regardless: a projector is typically 1080p native, so
+   * the extra samples are resolved by nothing. Budget the backing store instead
+   * of trusting the display, and scale smoothly rather than falling off a cliff
+   * at some arbitrary width. */
+  renderDensity() {
+    const native = Math.min(2, window.devicePixelRatio || 1);
+    const BUDGET = 6e6;   // device pixels; a laptop panel stays at full density
+    const area = Math.max(1, this.w * this.h);
+    return Math.max(1, Math.min(native, Math.sqrt(BUDGET / area)));
   }
 
   // The band hues are tokens, and the stage is not allowed a second opinion
