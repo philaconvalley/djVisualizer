@@ -1,478 +1,629 @@
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
-    color: #fff;
-    min-height: 100vh;
-    overflow: hidden;
+/* DJ Visualizer — Apple / Control Center register, Radiooooo reduction.
+   The canvas is the interface. One frosted console rail floats over it, always visible. */
+
+:root {
+  /* Ground. The use scene is a dark venue with a projected surface. */
+  --stage: #000000;
+  /* Alpha is set by the worst case, not the best: a bright Galaxy frame passing
+     under the rail must not lift the backdrop enough to break label contrast. */
+  --material: rgba(28, 28, 30, 0.86);
+  --material-solid: #1C1C1E;
+  --material-edge: rgba(255, 255, 255, 0.14);
+
+  /* Band identity. Mapping is fixed by the product; hues are tokens. */
+  --bass: #FF453A;
+  --mid: #30D158;
+  --high: #0A84FF;
+
+  /* Vibrancy-tuned label colors. Tinted from the foreground, never flat gray. */
+  --label: #FFFFFF;
+  --label-2: rgba(235, 235, 245, 0.8);
+  --label-3: rgba(235, 235, 245, 0.58);
+
+  --track: rgba(120, 120, 128, 0.32);
+
+  --radius-module: 14px;
+  --radius-control: 999px;
+
+  --rail-h: 116px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --press: 120ms;
+  --overlay: 200ms;
 }
 
-.app-container {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-}
+* { box-sizing: border-box; }
 
-.sidebar {
-  width: 300px;
-  background: rgba(0, 0, 0, 0.95);
-  backdrop-filter: blur(15px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.5);
-}
-
-.sidebar-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.sidebar-header h2 {
+html, body {
   margin: 0;
-  font-size: 1.4em;
-  font-weight: 600;
-  color: #fff;
+  padding: 0;
+  height: 100%;
 }
 
-.control-section {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.control-section h3 {
-  margin: 0 0 15px 0;
-  font-size: 1.1em;
-  font-weight: 500;
-  color: #ccc;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.control-group {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 15px;
-}
-
-.control-group:last-child {
-  margin-bottom: 0;
-}
-
-.sensitivity-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.slider-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-}
-
-.slider-group label {
-  min-width: 45px;
-  font-size: 0.9em;
-  color: #ccc;
-  font-size: 12px;
-  color: #fff;
-}
-
-.slider-group input[type="range"] {
-  flex: 1;
-  position: relative;
-  background: #000;
+body {
+  background: var(--stage);
+  color: var(--label);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  width: 100%;
-  height: 100%;
 }
 
-.slider-group input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #4CAF50;
-  border-radius: 50%;
-  cursor: pointer;
+/* Browser surfaces the design still owns. */
+::selection { background: var(--high); color: #fff; }
+:focus-visible {
+  outline: 2px solid var(--high);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--track);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
-.slider-group span {
-  min-width: 30px;
-  font-size: 11px;
-  color: #ccc;
-  text-align: right;
-}
+/* ---------- Stage ---------- */
 
-.status-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9em;
-}
-
-.status-label {
-  min-width: 50px;
-  color: #999;
-  font-size: 0.85em;
-}
-
-.status-item span:not(.status-label) {
-  color: #fff;
-  font-weight: 500;
-}
-
-.beat-indicator {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #333;
-  border: 2px solid #666;
-  transition: all 0.1s ease;
-  margin-left: 10px;
-}
-
-.beat-indicator.flash {
-  background: #ff4444;
-  border-color: #ff8888;
-  box-shadow: 0 0 20px #ff4444;
-  transform: scale(1.2);
-}
-
-/* Help Overlay Styles */
-.help-overlay {
+/* The canvas owns the whole viewport; the console floats over it, so content
+   runs under translucent chrome rather than being boxed beside it. */
+.stage {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.9);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  inset: 0;
+  background: var(--stage);
+  overflow: hidden;
 }
 
-.help-content {
-  background: #222;
-  border: 2px solid #444;
-  border-radius: 10px;
-  padding: 30px;
-  max-width: 600px;
-  color: #fff;
+/* Spectrum Bars used to be 256 DOM nodes here, restyled sixty times a second
+   and swapped in and out against the canvas. It is a canvas mode now like the
+   other eight, which is what lets one grammar cover all nine. PHI-154. */
+
+/* Polygon Collage's accumulation buffer. A plain 2D canvas underneath the
+   WEBGL one, which runs transparent while that mode is up. Compositing it
+   through the GPU meant re-uploading a full-screen texture every frame. */
+#collage-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
 }
 
-.help-content h3 {
-  margin-top: 0;
-  color: #4CAF50;
-  text-align: center;
-}
-
-.help-content h4 {
-  color: #2196F3;
-  margin-bottom: 10px;
-}
-
-.help-section {
-  margin-bottom: 25px;
-}
-
-.help-content kbd {
-  background: #333;
-  border: 1px solid #555;
-  border-radius: 3px;
-  padding: 2px 6px;
-  font-family: monospace;
-  color: #fff;
-}
-
-.help-close {
-  text-align: center;
-  margin-top: 20px;
-  color: #888;
-  font-style: italic;
-}
-
-.visualizer-container {
-    flex: 1;
-    background-color: #000;
-    overflow: hidden;
-    position: relative;
-    width: 100%;
-    height: 100%;
-}
-
-#spectrum-visualizer {
-    position: absolute;
-    display: flex;
-    align-items: end;
-    height: 100%;
-    width: 100%;
-    padding: 20px;
-    box-sizing: border-box;
-    z-index: 1;
-}
-
-#spectrum-visualizer div {
-    width: 4px;
-    margin: 0 1px;
-    transition: height 0.1s ease-in-out;
-}
-
-/* Frequency-based spectrum bar colors */
-#spectrum-visualizer div:nth-child(3n+1) {
-    background: linear-gradient(180deg, rgba(255, 80, 80, 0.8), rgba(255, 80, 80, 1));
-}
-
-#spectrum-visualizer div:nth-child(3n+2) {
-    background: linear-gradient(180deg, rgba(80, 255, 120, 0.8), rgba(80, 255, 120, 1));
-}
-
-#spectrum-visualizer div:nth-child(3n+3) {
-    background: linear-gradient(180deg, rgba(80, 160, 255, 0.8), rgba(80, 160, 255, 1));
-}
+#collage-canvas[hidden] { display: none; }
 
 #p5-canvas {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   z-index: 2;
 }
 
-.frequency-info {
-    display: flex;
-    gap: 10px;
-    justify-content: space-between;
+#p5-canvas canvas { display: block; }
+
+.stage-hint {
+  position: absolute;
+  inset: auto 0 calc(var(--rail-h) + 6vmin) 0;
+  z-index: 3;
+  margin: 0;
+  text-align: center;
+  color: var(--label-3);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  transition: opacity 250ms var(--ease-out);
 }
 
-.freq-ranges {
-    display: flex;
-    gap: 10px;
-    justify-content: space-between;
-    margin-top: 8px;
-}
-
-.freq-ranges .freq-range {
-    flex: 1;
-    text-align: center;
-}
-
-.freq-band {
-    flex: 1;
-    text-align: center;
-    padding: 10px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.4);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    position: relative;
-    height: 80px;
-    justify-content: space-between;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.color-indicator {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    margin-bottom: 5px;
-}
-
-.bass-color {
-    background-color: rgb(255, 80, 80);
-    box-shadow: 0 0 10px rgba(255, 80, 80, 0.5);
-}
-
-.mid-color {
-    background-color: rgb(80, 255, 120);
-    box-shadow: 0 0 10px rgba(80, 255, 120, 0.5);
-}
-
-.high-color {
-    background-color: rgb(80, 160, 255);
-    box-shadow: 0 0 10px rgba(80, 160, 255, 0.5);
-}
-
-.freq-band.bass {
-    border-left: 4px solid rgb(255, 80, 80);
-}
-
-.freq-band.mid {
-    border-left: 4px solid rgb(80, 255, 120);
-}
-
-.freq-band.high {
-    border-left: 4px solid rgb(80, 160, 255);
-}
-
-.freq-band .label {
-    display: block;
-    font-weight: bold;
-    font-size: 18px;
-    margin-bottom: 5px;
-}
-
-.freq-band .range {
-    display: block;
-    font-size: 12px;
-    opacity: 0.7;
-    margin-bottom: 10px;
-}
-
-.freq-fill {
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60px;
-    height: 0%;
-    border-radius: 4px 4px 0 0;
-    transition: height 0.1s ease-out;
-}
-
-.bass-fill {
-    background: linear-gradient(180deg, #ff3c28, #ff6040);
-    box-shadow: 0 0 15px rgba(255, 60, 40, 0.5);
-}
-
-.mid-fill {
-    background: linear-gradient(180deg, #28ff50, #40ff68);
-    box-shadow: 0 0 15px rgba(40, 255, 80, 0.5);
-}
-
-.high-fill {
-    background: linear-gradient(180deg, #2878ff, #4088ff);
-    box-shadow: 0 0 15px rgba(40, 120, 255, 0.5);
-}
-
-.freq-label {
-    font-size: 10px;
-    font-weight: bold;
-    color: #fff;
-    margin-bottom: 3px;
-}
-
-.freq-range {
-    font-size: 8px;
-    color: #888;
-    margin-top: 3px;
-}
-
-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 25px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-  min-width: 80px;
-  margin: 10px 0 5px 0;
-}
-
-#fullscreen {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  box-shadow: 0 2px 8px rgba(245, 87, 108, 0.4);
-}
-
-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-}
-
-button:active {
-    transform: translateY(0);
-}
-
-select {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 10px 15px;
-  border-radius: 20px;
-  font-size: 13px;
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-  min-width: 160px;
-  margin: 5px 0;
-  transition: all 0.3s ease;
-}
-
-select:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-select:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
-}
-
-label {
-  color: white;
+/* The warning belongs in front of the person who has not started yet. */
+.stage-warn {
+  display: block;
+  margin-top: 6px;
   font-size: 12px;
-  font-weight: 500;
+  color: var(--label-3);
 }
 
-select option {
-    background: #1a1a1a;
-    color: #fff;
+body[data-running="true"] .stage-hint { opacity: 0; }
+
+/* ---------- Console ---------- */
+
+.console {
+  position: fixed;
+  inset: auto 0 0 0;
+  min-height: var(--rail-h);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 14px 18px;
+  flex-wrap: wrap;
+
+  background: var(--material);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  /* Light catching the top edge of a real material. Elevation declared once. */
+  box-shadow: inset 0 1px 0 0 var(--material-edge), 0 -12px 40px rgba(0, 0, 0, 0.5);
 }
 
-input[type="file"] {
-  color: #ccc;
-  font-size: 12px;
-  max-width: 100%;
+/* Opaque scrim beneath the translucent rail so the composite floor is fixed
+   whatever the canvas is doing behind it. Without it, label contrast tracks
+   the brightness of the visualisation. */
+.console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.34));
+  pointer-events: none;
 }
 
-input[type="file"]::file-selector-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 20px;
+.console-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Capped so the rail stays one row on a laptop. Unbounded growth here pushes
+   the readout to a second line and doubles the chrome. */
+.console-group--bands {
+  flex: 1 1 300px;
+  max-width: 420px;
+  min-width: 280px;
+  gap: 14px;
+}
+
+.console-group--output { margin-left: auto; }
+
+.console-group--media {
+  flex-basis: 100%;
+  gap: 12px;
+}
+
+.console-group--media[hidden] { display: none; }
+
+/* ---------- Transport ---------- */
+
+.transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px 12px 18px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: rgba(120, 120, 128, 0.24);
+  color: var(--label);
+  font: inherit;
+  font-weight: 590;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  transition: background-color var(--press) ease, transform var(--press) var(--ease-out);
+}
+
+/* Feedback on press, not on release. */
+.transport:active { transform: scale(0.97); }
+
+.transport-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--label-3);
+  transition: background-color var(--press) ease;
+}
+
+body[data-running="true"] .transport { background: rgba(255, 69, 58, 0.22); }
+body[data-running="true"] .transport-dot { background: var(--bass); }
+
+.transport:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- Fields ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 590;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--label-3);
+}
+
+.field-control {
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 190px;
+  text-overflow: ellipsis;
+  padding: 8px 30px 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(120, 120, 128, 0.24);
+  color: var(--label);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color var(--press) ease;
+  background-image: linear-gradient(45deg, transparent 50%, var(--label-2) 50%),
+                    linear-gradient(135deg, var(--label-2) 50%, transparent 50%);
+  background-position: right 14px center, right 9px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.field-control option { background: var(--material-solid); color: var(--label); }
+
+.field-file { color: var(--label-2); font-size: 13px; max-width: 260px; }
+
+.field-file::file-selector-button {
   margin-right: 10px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: rgba(120, 120, 128, 0.24);
+  color: var(--label);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  transition: background-color var(--press) ease;
 }
 
-.custom-media-status {
-  font-size: 0.85em;
-  color: #999;
+.custom-media-status { font-size: 13px; color: var(--label-3); }
+
+/* ---------- The three-band instrument ----------
+   Level and gain are one object. The fill is the post-gain level — room times
+   the gain you asked for, which is how Logic and Serato meter — and the thumb
+   is the gain itself. */
+
+.band {
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
+.band-track {
+  position: relative;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(120, 120, 128, 0.2);
+  overflow: hidden;
+}
+
+.band-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  border-radius: 8px;
+}
+
+.band[data-band="bass"] .band-fill { background: var(--bass); }
+.band[data-band="mid"]  .band-fill { background: var(--mid); }
+.band[data-band="high"] .band-fill { background: var(--high); }
+
+.band-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.band-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 4px;
+  height: 42px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--label);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  cursor: ew-resize;
+}
+
+.band-input::-moz-range-thumb {
+  width: 4px;
+  height: 42px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--label);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  cursor: ew-resize;
+}
+
+.band-input::-moz-range-track { background: transparent; }
+
+/* Grab feedback only. The fill itself is a meter and never animates —
+   a transition there would put latency between the sound and the reading. */
+.band-track { transition: background-color var(--press) ease; }
+.band:has(.band-input:active) .band-track { background: rgba(120, 120, 128, 0.3); }
+
+/* Pointer affordance. Gated because touch fires a false hover on tap. */
+@media (hover: hover) and (pointer: fine) {
+  .transport:hover,
+  .ghost:hover,
+  .field-control:hover { background-color: rgba(120, 120, 128, 0.36); }
+  body[data-running="true"] .transport:hover { background-color: rgba(255, 69, 58, 0.32); }
+  .band:hover .band-track { background-color: rgba(120, 120, 128, 0.26); }
+  .field-file::file-selector-button:hover { background-color: rgba(120, 120, 128, 0.36); }
+}
+
+.band-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.band-name {
+  font-weight: 590;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--label-2);
+}
+
+/* Exact Hz is reference, not performance information. The name teaches; the
+   numbers live in the help panel where they can be read without crowding. */
+.band-range { display: none; }
+
+.band-value {
+  margin-left: auto;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Readout ---------- */
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 116px;
+}
+
+.readout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.readout-key {
+  min-width: 30px;
+  font-size: 11px;
+  font-weight: 590;
+  letter-spacing: 0.04em;
+  color: var(--label-3);
+}
+
+.readout-val {
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--label);
+}
+
+.readout-status {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--label-3);
+  max-width: 190px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fires roughly twice a second. Transition, never keyframes: it retargets from
+   the current value instead of restarting. Instant on, decay out. */
+.beat-indicator {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--track);
+  transition: background-color 240ms var(--ease-out);
+}
+
+/* The glow is a pseudo-element whose opacity animates, not a transitioned
+   box-shadow. Shadow is a paint property; opacity composites on the GPU. */
+.beat-indicator::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 69, 58, 0.6) 0%, rgba(255, 69, 58, 0) 70%);
+  opacity: 0;
+  transition: opacity 240ms var(--ease-out);
+  pointer-events: none;
+}
+
+.beat-indicator.flash {
+  transition: none;
+  background: var(--bass);
+}
+
+.beat-indicator.flash::after {
+  opacity: 1;
+  transition: none;
+}
+
+.ghost {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: rgba(120, 120, 128, 0.24);
+  color: var(--label);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  cursor: pointer;
+  transition: background-color var(--press) ease, transform var(--press) var(--ease-out);
+}
+
+.ghost:active { transform: scale(0.97); }
+
+/* ---------- Help ---------- */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  /* Not anchored to a trigger, so it stays centred rather than scaling from one. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--overlay) var(--ease-out),
+              visibility 0s linear var(--overlay);
+}
+
+.help-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--overlay) var(--ease-out), visibility 0s;
+}
+
+.help-content {
+  transform: scale(0.96);
+  transition: transform var(--overlay) var(--ease-out);
+  width: min(520px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 30px 32px;
+  border-radius: var(--radius-module);
+  background: var(--material-solid);
+  box-shadow: inset 0 1px 0 0 var(--material-edge), 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.help-overlay.is-open .help-content { transform: scale(1); }
+
+.help-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.help-content h2 {
+  margin: 0 0 20px;
+  font-size: 26px;
+  font-weight: 640;
+  letter-spacing: -0.025em;
+}
+
+.help-content h3 {
+  margin: 26px 0 10px;
+  font-size: 12px;
+  font-weight: 590;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--label-3);
+}
+
+.help-keys { margin: 0; display: flex; flex-direction: column; gap: 9px; }
+.help-keys > div { display: flex; align-items: baseline; gap: 14px; }
+.help-keys dt { min-width: 96px; margin: 0; }
+.help-keys dd { margin: 0; color: var(--label-2); font-size: 14px; }
+
+.help-notes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--label-2);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+kbd {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(120, 120, 128, 0.28);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 590;
+}
+
+.help-close {
+  margin: 24px 0 0;
+  font-size: 12px;
+  color: var(--label-3);
+}
+
+/* Flash reduction is a safety control, so it lives in the always-visible rail
+   rather than behind a panel nobody on a touch surface can open. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--label-2);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--high);
+  cursor: pointer;
+}
+
+/* ---------- Accessibility preferences ---------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  .console, .help-overlay, .help-content {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .console { background: var(--material-solid); }
+  .help-overlay { background: rgba(0, 0, 0, 0.94); }
+}
+
+@media (prefers-contrast: more) {
+  :root { --label-2: #FFFFFF; --label-3: rgba(235, 235, 245, 0.8); }
+  .console { background: #000; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5); }
+  .transport, .ghost, .field-control { background: rgba(120, 120, 128, 0.45); }
+}
+
+/* Fewer and gentler, not zero. Colour and opacity still carry meaning here;
+   only positional and scale change is removed. */
+@media (prefers-reduced-motion: reduce) {
+  .transport:active,
+  .ghost:active { transform: none; }
+  .help-content,
+  .help-overlay.is-open .help-content { transform: none; transition: none; }
+  /* The canvas flash is damped through flashIntensity; the rail's glow pulse
+     must agree with it under the same preference. The dot still changes colour,
+     because colour is not movement. */
+  .beat-indicator::after,
+  .beat-indicator.flash::after { opacity: 0; }
+}
+
+/* Desktop-first by design: this needs a hardware audio input and a large display.
+   Narrow widths stay usable rather than pretty; nothing may overflow the viewport. */
+@media (max-width: 860px) {
+  .console { gap: 14px 18px; padding: 14px; }
+  .console-group { flex-wrap: wrap; }
+  .console-group--output { margin-left: 0; width: 100%; justify-content: space-between; }
+  .console-group--bands { flex-basis: 100%; }
+  .readout-status { max-width: none; }
+  .field-control { max-width: 100%; }
+  /* The range label is the least load-bearing text here and it wraps,
+     stranding the value mid-line. Name plus value is the whole reading. */
 }

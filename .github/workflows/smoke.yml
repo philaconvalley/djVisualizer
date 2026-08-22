@@ -1,0 +1,80 @@
+# Asks whether the deployed app actually loads, which is a different question
+# from whether the deployment succeeded. The host reported success for two pull
+# requests while serving a site with no p5 on it.
+name: Deploy smoke check
+
+on:
+  # Fires on every merge to main. The job then waits until the live site is
+  # actually serving this commit before testing it — see "Wait for the deploy".
+  #
+  # This replaced a `deployment_status` trigger, which looked right and was
+  # dead: every GitHub Deployment on this repo was created by vercel[bot], and
+  # Vercel has been removed. Netlify reports as a commit status, not a
+  # Deployment, so that trigger would never have fired again — the workflow
+  # would have quietly degraded to the schedule alone while still looking
+  # wired up.
+  push:
+    branches: [main]
+
+  # Production drift, outages, expired certificates.
+  schedule:
+    - cron: '0 */6 * * *'
+
+  # By hand, against any URL including a deploy preview.
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Base URL to check'
+        required: false
+        default: 'https://dj-visualizer.netlify.app'
+
+permissions:
+  contents: read
+
+env:
+  SITE: https://dj-visualizer.netlify.app
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Only meaningful on push: confirm the CDN is serving the commit we just
+      # merged before asserting anything about it. Testing the previous build
+      # and passing is worse than not testing — it is a green light for code
+      # that was never checked.
+      - name: Wait for the deploy
+        if: github.event_name == 'push'
+        run: |
+          for attempt in $(seq 1 30); do
+            LIVE=$(curl -fsS --max-time 15 "$SITE/build-info.json" 2>/dev/null \
+                   | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')
+            if [ "$LIVE" = "${{ github.sha }}" ]; then
+              echo "Live build is ${LIVE:0:7} — matches this commit."
+              exit 0
+            fi
+            echo "Attempt $attempt: live is '${LIVE:-none}', want ${GITHUB_SHA:0:7}"
+            sleep 20
+          done
+          echo "::error::Timed out after 10 minutes waiting for the deploy of ${GITHUB_SHA:0:7}."
+          echo "::error::If build-info.json is missing entirely, the netlify.toml build command is not running."
+          exit 1
+
+      - name: Smoke check
+        run: |
+          TARGET="${{ inputs.url || env.SITE }}"
+          echo "Checking $TARGET"
+          for attempt in 1 2 3; do
+            if node test/smoke-deploy.mjs "$TARGET"; then
+              exit 0
+            fi
+            echo "::warning::Attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Deployed app failed the smoke check at $TARGET"
+          exit 1

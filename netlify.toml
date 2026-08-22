@@ -1,6 +1,12 @@
 [build]
   publish = "."
-  command = "echo 'No build step required for static site'"
+  # Still no build in any meaningful sense: this writes one small file naming
+  # the commit that is live, and nothing in the app reads it. It exists so CI
+  # can tell whether the deploy it is about to test is the one it just pushed.
+  # Without it a check running seconds after a merge tests the *previous* build
+  # and reports a green that means nothing — the exact failure this project
+  # already paid for once. COMMIT_REF is supplied by Netlify.
+  command = "printf '{\"commit\":\"%s\"}' \"$COMMIT_REF\" > build-info.json"
 
 [[headers]]
   for = "/*"
@@ -9,7 +15,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' cdnjs.cloudflare.com unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'"
 
 [[headers]]
   for = "*.js"

@@ -5,9 +5,22 @@
 .claude/
 .vscode/
 node_modules/
-.vercel/
 
 # Secrets / logs
 .env
 .env.*
 *.log
+
+# Impeccable design tooling (local session state, not product)
+.impeccable/
+
+# Playwright scratch
+.playwright-mcp/
+
+# Verification harness artefacts. Fixtures are generated (npm run fixtures);
+# output is screenshots and a results file from the last run.
+test/fixtures/*.wav
+test/output/
+
+# Written by the Netlify build so CI can tell which commit is live.
+build-info.json

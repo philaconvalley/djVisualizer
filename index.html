@@ -2,163 +2,174 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>DJ Visualizer – Creative Code</title>
-    
-    <!-- External Styles -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DJ Visualizer</title>
     <link rel="stylesheet" href="styles/styles.css">
-    
-    <!-- External Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js" integrity="sha384-bOv+b6RV+dlZvdQAx6+cJ+FK9ab8JCSVWyJ1JPhMVQjPW+4C8V2cOKK+qZDfnRnx" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/p5.asciify@0.10.3/dist/p5.asciify.umd.js" integrity="sha384-3a9/9qMRKxoYHbT9GDATpAfOl7/Nd+jEB17thjgvZHx0IBzh+HYRB3iD2/BORQgo" crossorigin="anonymous"></script>
+    <!-- Vendored, not CDN. The venue network is assumed hostile; nothing may be
+         fetched at showtime. Pinned to p5 1.9.0 — update deliberately. -->
+    <script src="vendor/p5.min.js"></script>
   </head>
   <body>
-    <div class="app-container">
-      <!-- Sidebar Controls -->
-      <div class="sidebar">
-        <div class="sidebar-header">
-          <h2>DJ Controls</h2>
-        </div>
-        
-        <div class="control-section">
-          <h3>Audio</h3>
-          <div class="control-group">
-            <label for="audioInputSelect">Input Device:</label>
-            <select id="audioInputSelect">
-              <option value="">Auto-select best device</option>
-            </select>
+    <!--
+      THESIS: The visualization is the interface. One persistent translucent console
+      floats over a full-bleed canvas; it refuses the six-section opaque panel beside
+      a boxed stage that this app shipped with.
+      OWN-WORLD: Matte black ground, a single frosted material with a bright top edge,
+      system-ui with size-specific tracking, and the three bands as the only saturated
+      colour on the surface. No gradients, no glow, no dividers.
+      STORY: The operator plugs in, presses one control, and plays. A passerby sees a
+      field answering the room and reaches for the one thing that is obviously grabbable.
+      FIRST VIEWPORT: Canvas edge to edge. One console rail across the bottom holding
+      transport, the three-band instrument, mode, and a quiet readout.
+      FORM: Apple / Control Center register, user-pinned; a pin beats the roll. Reduction
+      target Radiooooo, craft bar Logic Pro. Seed key dc6e49df, overridden by the pin.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+
+    <main class="stage">
+      <div id="p5-canvas"></div>
+      <p class="stage-hint" id="stageHint">
+        Press Start to read the room
+        <span class="stage-warn">Flashing imagery &mdash; use Reduce flashing if that is a concern</span>
+      </p>
+    </main>
+
+    <div class="console" role="group" aria-label="Visualizer controls">
+      <section class="console-group console-group--transport">
+        <button id="start" class="transport" type="button">
+          <span class="transport-dot" aria-hidden="true"></span>
+          <span class="transport-label">Start</span>
+        </button>
+
+        <label class="field">
+          <span class="field-label">Source</span>
+          <select id="audioInputSelect" class="field-control">
+            <option value="">Auto-select best device</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="console-group console-group--bands" aria-label="Frequency bands">
+        <div class="band" data-band="bass">
+          <div class="band-track">
+            <div class="band-fill bass-fill" aria-hidden="true"></div>
+            <input type="range" id="bassGain" class="band-input"
+                   min="0.1" max="3" step="0.1" value="1" aria-label="Bass sensitivity">
           </div>
-          <div class="control-group">
-            <button id="start">Start Audio</button>
-            <button id="fullscreen">Fullscreen</button>
-          </div>
-        </div>
-        
-        <div class="control-section">
-          <h3>Visualization</h3>
-          <div class="control-group">
-            <label for="visualMode">Mode:</label>
-            <select id="visualMode">
-              <option value="spectrum">Spectrum Bars</option>
-              <option value="particles">Floating Particles</option>
-              <option value="rings">Frequency Rings</option>
-              <option value="waves">Wave Forms</option>
-              <option value="mandala">Mandala</option>
-              <option value="tunnel">Tunnel Vision</option>
-              <option value="galaxy">Galaxy</option>
-              <option value="polygons">Polygon Collage</option>
-              <option value="custom">Custom Upload</option>
-            </select>
+          <div class="band-meta">
+            <span class="band-name">Bass</span>
+            <span class="band-range">20&ndash;250 Hz</span>
+            <span class="band-value" id="bassValue">1.0</span>
           </div>
         </div>
 
-        <div class="control-section" id="customMediaSection">
-          <h3>Custom Media</h3>
-          <div class="control-group">
-            <label for="customMediaUpload">Image / GIF / Video:</label>
-            <input type="file" id="customMediaUpload" accept="image/*,video/*">
+        <div class="band" data-band="mid">
+          <div class="band-track">
+            <div class="band-fill mid-fill" aria-hidden="true"></div>
+            <input type="range" id="midGain" class="band-input"
+                   min="0.1" max="3" step="0.1" value="1" aria-label="Mid sensitivity">
           </div>
-          <div class="control-group">
-            <span id="customMediaStatus" class="custom-media-status">No file selected</span>
+          <div class="band-meta">
+            <span class="band-name">Mid</span>
+            <span class="band-range">250 Hz&ndash;4 kHz</span>
+            <span class="band-value" id="midValue">1.0</span>
           </div>
         </div>
 
-        <div class="control-section">
-          <h3>EQ Sensitivity</h3>
-          <div class="sensitivity-controls">
-            <div class="slider-group">
-              <label for="bassGain">Bass</label>
-              <input type="range" id="bassGain" min="0.1" max="3" step="0.1" value="1">
-              <span id="bassValue">1.0</span>
-            </div>
-            <div class="slider-group">
-              <label for="midGain">Mid</label>
-              <input type="range" id="midGain" min="0.1" max="3" step="0.1" value="1">
-              <span id="midValue">1.0</span>
-            </div>
-            <div class="slider-group">
-              <label for="highGain">High</label>
-              <input type="range" id="highGain" min="0.1" max="3" step="0.1" value="1">
-              <span id="highValue">1.0</span>
-            </div>
+        <div class="band" data-band="high">
+          <div class="band-track">
+            <div class="band-fill high-fill" aria-hidden="true"></div>
+            <input type="range" id="highGain" class="band-input"
+                   min="0.1" max="3" step="0.1" value="1" aria-label="High sensitivity">
+          </div>
+          <div class="band-meta">
+            <span class="band-name">High</span>
+            <span class="band-range">4&ndash;20 kHz</span>
+            <span class="band-value" id="highValue">1.0</span>
           </div>
         </div>
-        
-        <div class="control-section">
-          <h3>EQ Levels</h3>
-          <div class="frequency-info">
-            <div class="freq-band bass">
-              <div class="freq-fill bass-fill"></div>
-              <span class="freq-label">BASS</span>
-            </div>
-            <div class="freq-band mid">
-              <div class="freq-fill mid-fill"></div>
-              <span class="freq-label">MID</span>
-            </div>
-            <div class="freq-band high">
-              <div class="freq-fill high-fill"></div>
-              <span class="freq-label">HIGH</span>
-            </div>
+      </section>
+
+      <section class="console-group console-group--output">
+        <label class="field">
+          <span class="field-label">Mode</span>
+          <select id="visualMode" class="field-control">
+            <option value="spectrum">Spectrum Bars</option>
+            <option value="particles">Floating Particles</option>
+            <option value="rings">Frequency Rings</option>
+            <option value="waves">Wave Forms</option>
+            <option value="mandala">Mandala</option>
+            <option value="tunnel">Tunnel Vision</option>
+            <option value="galaxy">Galaxy</option>
+            <option value="polygons">Polygon Collage</option>
+            <option value="custom">Custom Upload</option>
+            <option value="flow">Flow</option>
+          </select>
+        </label>
+
+        <div class="readout">
+          <div class="readout-row">
+            <span class="readout-key">BPM</span>
+            <span class="readout-val" id="bpmCounter">&mdash;</span>
+            <span class="beat-indicator" id="beatIndicator" aria-hidden="true"></span>
           </div>
-          <div class="freq-ranges">
-            <span class="freq-range">20-250Hz</span>
-            <span class="freq-range">250-4kHz</span>
-            <span class="freq-range">4k-20kHz</span>
+          <div class="readout-row">
+            <span class="readout-key">FPS</span>
+            <span class="readout-val" id="fpsCounter">&mdash;</span>
           </div>
+          <p class="readout-status" id="deviceStatus" aria-live="polite">No device selected</p>
         </div>
-        
-        <div class="control-section">
-          <h3>Status</h3>
-          <div class="status-info">
-            <div class="status-item">
-              <span class="status-label">Device:</span>
-              <span id="deviceStatus">No device selected</span>
-            </div>
-            <div class="status-item">
-              <span class="status-label">BPM:</span>
-              <span id="bpmCounter">--</span>
-              <div class="beat-indicator" id="beatIndicator"></div>
-            </div>
-            <div class="status-item">
-              <span class="status-label">FPS:</span>
-              <span id="fpsCounter">--</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Main Content Area -->
-      <div class="main-content">
-        <div class="visualizer-container">
-          <div id="spectrum-visualizer"></div>
-          <div id="p5-canvas"></div>
-        </div>
-      </div>
+
+        <label class="toggle" title="Reduce large flashing changes in the visuals">
+          <input type="checkbox" id="reduceFlash">
+          <span>Reduce flash</span>
+        </label>
+
+        <button id="fullscreen" class="ghost" type="button">Fullscreen</button>
+        <button id="helpToggle" class="ghost" type="button"
+                aria-haspopup="dialog" aria-label="Keyboard controls and performance notes">?</button>
+      </section>
+
+      <section class="console-group console-group--media" id="customMediaSection" hidden>
+        <label class="field">
+          <span class="field-label">Image, GIF or video</span>
+          <input type="file" id="customMediaUpload" class="field-file" accept="image/*,video/*">
+        </label>
+        <span id="customMediaStatus" class="custom-media-status">No file selected</span>
+      </section>
     </div>
-    
-    <!-- Help Overlay -->
-    <div id="helpOverlay" class="help-overlay" style="display: none;">
+
+    <div id="helpOverlay" class="help-overlay" role="dialog" aria-modal="true"
+         aria-labelledby="helpTitle">
       <div class="help-content">
-        <h3>DJ Visualizer Controls</h3>
-        <div class="help-section">
-          <h4>Keyboard Shortcuts</h4>
-          <p><kbd>Space</kbd> - Start/Stop Audio</p>
-          <p><kbd>F</kbd> - Toggle Fullscreen</p>
-          <p><kbd>1-4</kbd> - Switch Visualization Modes</p>
-          <p><kbd>R</kbd> - Reset All Gains to 1.0</p>
-          <p><kbd>?</kbd> - Show/Hide This Help</p>
+        <div class="help-head">
+          <h2 id="helpTitle">Controls</h2>
+          <button id="helpClose" class="ghost" type="button">Close</button>
         </div>
-        <div class="help-section">
-          <h4>Live Performance Tips</h4>
-          <p>• Use Pioneer DDJ-REV1 for best audio quality</p>
-          <p>• BPM detection works best with kick drums</p>
-          <p>• Adjust frequency gains for visual balance</p>
-          <p>• Beat indicator flashes with detected tempo</p>
-        </div>
+        <dl class="help-keys">
+          <div><dt><kbd>Space</kbd></dt><dd>Start or stop audio</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Toggle fullscreen</dd></div>
+          <div><dt><kbd>1</kbd>&ndash;<kbd>9</kbd>, <kbd>0</kbd></dt><dd>Switch visualization mode (0 selects the tenth)</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd>Reset all sensitivities</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>Show or hide this panel</dd></div>
+        </dl>
+        <h3>Frequency bands</h3>
+        <dl class="help-keys">
+          <div><dt>Bass</dt><dd>20&ndash;250 Hz</dd></div>
+          <div><dt>Mid</dt><dd>250 Hz&ndash;4 kHz</dd></div>
+          <div><dt>High</dt><dd>4&ndash;20 kHz</dd></div>
+        </dl>
+
+        <h3>Performing</h3>
+        <ul class="help-notes">
+          <li>Connect the controller by USB before starting; DJ hardware is detected and listed first.</li>
+          <li>Beat detection keys off the kick and reads the input directly, ahead of these sliders — the sensitivity controls change how the visuals respond, never what BPM reports.</li>
+          <li>This visualizer flashes in time with the music. Use the Reduce flashing control in the console to damp it; it turns itself on if your system asks for reduced motion.</li>
+        </ul>
         <p class="help-close">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</p>
       </div>
     </div>
 
-    <!-- Application Modules -->
     <script src="app/audioProcessor.js"></script>
     <script src="app/visualizer.js"></script>
     <script src="app/app.js"></script>

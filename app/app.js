@@ -35,12 +35,30 @@ class DJVisualizerApp {
     
     // Set up gain controls
     this.setupGainControls();
+    this.setupConsoleChrome();
     
     // Set up keyboard shortcuts for live performance
     document.addEventListener('keydown', (e) => {
-      // Prevent shortcuts when typing in inputs
-      if (e.target.tagName === 'INPUT') return;
-      
+      // Only text entry should swallow shortcuts. A focused range slider must not
+      // kill Space and F, or the transport dies as soon as you touch a band.
+      if (e.target.matches('input[type="file"], input[type="text"], textarea')) return;
+
+      // Every mode in the dropdown is reachable, in dropdown order. 1-9 then 0
+      // for the tenth, following the convention browsers use for tabs. A mode
+      // the operator cannot reach from the keyboard mid-set may as well not
+      // exist, so this has to keep pace with the dropdown.
+      const digit = e.code.match(/^Digit([0-9])$/);
+      if (digit) {
+        const options = document.getElementById('visualMode')?.options;
+        const position = digit[1] === '0' ? 10 : Number(digit[1]);
+        const opt = options?.[position - 1];
+        if (opt) {
+          e.preventDefault();
+          this.switchVisualizationMode(opt.value);
+        }
+        return;
+      }
+
       switch(e.code) {
         case 'Space':
           e.preventDefault();
@@ -49,22 +67,6 @@ class DJVisualizerApp {
         case 'KeyF':
           e.preventDefault();
           this.toggleFullscreen();
-          break;
-        case 'Digit1':
-          e.preventDefault();
-          this.switchVisualizationMode('spectrum');
-          break;
-        case 'Digit2':
-          e.preventDefault();
-          this.switchVisualizationMode('particles');
-          break;
-        case 'Digit3':
-          e.preventDefault();
-          this.switchVisualizationMode('rings');
-          break;
-        case 'Digit4':
-          e.preventDefault();
-          this.switchVisualizationMode('waves');
           break;
         case 'KeyR':
           e.preventDefault();
@@ -95,9 +97,21 @@ class DJVisualizerApp {
         high: data.high * this.highGain
       };
       this.visualizer.updateAudioData(adjustedData);
-      console.log(`Received BPM data: ${data.bpm}`);
       this.updateBPM(data.bpm);
-      this.updateFPS();
+    };
+
+    // FPS is a rendering measurement and has to be counted where rendering
+    // happens. Counted on the audio callback it reported the analyser's fixed
+    // rate — a steady 60 while the projector stuttered, which is worse than no
+    // readout at all.
+    this.visualizer.onFrame = () => this.updateFPS();
+
+    // A beat is a discrete event, so it gets its own channel rather than being
+    // re-derived from the BPM number on every frame. Both the rail indicator
+    // and the stage strike off the same event, which is why they now agree.
+    this.audioProcessor.onBeat = () => {
+      this.pulseBeatIndicator();
+      this.visualizer.onBeatEvent();
     };
 
     // Check permissions and populate audio devices
@@ -158,9 +172,9 @@ class DJVisualizerApp {
         option.value = input.deviceId;
         option.textContent = input.label;
         
-        // Mark DJ devices with a special indicator
+        // DJ hardware already sorts first; the prefix is typographic, not an icon.
         if (input.isDJ) {
-          option.textContent = `🎧 ${input.label}`;
+          option.textContent = `DJ · ${input.label}`;
         }
         
         this.audioInputSelect.appendChild(option);
@@ -199,7 +213,7 @@ class DJVisualizerApp {
       // Specific device selected
       this.selectedDeviceId = selectedValue;
       const selectedOption = this.audioInputSelect.selectedOptions[0];
-      this.deviceStatusSpan.textContent = `Selected: ${selectedOption.textContent.replace('🎧 ', '')}`;
+      this.deviceStatusSpan.textContent = `Selected: ${selectedOption.textContent.replace('DJ · ', '')}`;
     }
     
     console.log('Device selection changed to:', this.selectedDeviceId || 'auto-select');
@@ -243,28 +257,26 @@ class DJVisualizerApp {
     try {
       // Update UI to show attempting to start
       this.deviceStatusSpan.textContent = 'Requesting audio access...';
-      this.startBtn.textContent = 'Starting...';
+      this.setTransport('Starting');
       this.startBtn.disabled = true;
       
       // Use selected device or let the system auto-select
       await this.audioProcessor.startAudio(this.selectedDeviceId);
       this.visualizer.start();
       this.isRunning = true;
-      this.startBtn.textContent = 'Stop';
-      this.startBtn.style.backgroundColor = '#ff4444';
+      this.setTransport('Stop', true);
       this.startBtn.disabled = false;
       
       // Update status to show active device
       const currentDevice = this.selectedDeviceId ? 
-        this.audioInputSelect.selectedOptions[0]?.textContent.replace('🎧 ', '') : 
+        this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '') : 
         'Auto-selected device';
       this.deviceStatusSpan.textContent = `Active: ${currentDevice}`;
       
       console.log('DJ Visualizer started with device:', currentDevice);
     } catch (error) {
       console.error('Failed to start audio:', error);
-      this.startBtn.textContent = 'Start';
-      this.startBtn.style.backgroundColor = '';
+      this.setTransport('Start', false);
       this.startBtn.disabled = false;
       
       // Provide specific error messages based on error type
@@ -298,12 +310,11 @@ class DJVisualizerApp {
     this.visualizer.stop();
     
     this.isRunning = false;
-    this.startBtn.textContent = 'Start';
-    this.startBtn.style.backgroundColor = '';
+    this.setTransport('Start', false);
     
     // Update status to show ready state
     const selectedDevice = this.selectedDeviceId ? 
-      this.audioInputSelect.selectedOptions[0]?.textContent.replace('🎧 ', '') : 
+      this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '') : 
       'Auto-select mode';
     this.deviceStatusSpan.textContent = `Ready: ${selectedDevice}`;
     
@@ -334,46 +345,6 @@ class DJVisualizerApp {
     });
   }
   
-  setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      
-      switch(e.code) {
-        case 'Space':
-          e.preventDefault();
-          this.toggleAudio();
-          break;
-        case 'KeyF':
-          e.preventDefault();
-          this.toggleFullscreen();
-          break;
-        case 'Digit1':
-        case 'Digit2':
-        case 'Digit3':
-        case 'Digit4':
-        case 'Digit5':
-        case 'Digit6':
-        case 'Digit7':
-        case '6': case '7': case '8': case '9':
-          e.preventDefault();
-          this.switchVisualizationMode(parseInt(e.key) - 1);
-          break;
-      }
-    });
-  }
-  
-  switchVisualizationMode(index) {
-    const visualModeSelect = document.getElementById('visualMode');
-    if (index < visualModeSelect.options.length) {
-      visualModeSelect.selectedIndex = index;
-      visualModeSelect.dispatchEvent(new Event('change'));
-    }
-  }
-  
-  async refreshAudioDevices() {
-    console.log('Refreshing audio device list...');
-    await this.populateAudioDevices();
-  }
   
   
   toggleFullscreen() {
@@ -420,33 +391,104 @@ class DJVisualizerApp {
     }
   }
 
+  setupConsoleChrome() {
+    // The rail wraps to different heights; measure it rather than guess, or the
+    // stage hint ends up painted behind the console.
+    const consoleEl = document.querySelector('.console');
+    if (consoleEl) {
+      // Writing inside the observer's own delivery cycle makes the browser
+      // report an undelivered-notification loop, so defer to the next frame and
+      // skip writes that would not change anything.
+      let lastHeight = -1;
+      let queued = false;
+      const sync = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          const height = Math.round(consoleEl.offsetHeight);
+          if (height === lastHeight) return;
+          lastHeight = height;
+          document.documentElement.style.setProperty('--rail-h', `${height}px`);
+          // The stage composes above the rail, so it needs the same measurement
+          // the CSS gets — not a second guess at it.
+          this.visualizer.setRailHeight(height);
+        });
+      };
+      sync();
+      if (window.ResizeObserver) new ResizeObserver(sync).observe(consoleEl);
+      else window.addEventListener('resize', sync);
+    }
+
+    document.getElementById('helpToggle')?.addEventListener('click', () => this.toggleHelp());
+    document.getElementById('helpClose')?.addEventListener('click', () => this.hideHelp());
+    document.getElementById('helpOverlay')?.addEventListener('click', (e) => {
+      if (e.target.id === 'helpOverlay') this.hideHelp();
+    });
+
+    // Flash reduction: a safety control, defaulted from the OS preference but
+    // overridable in both directions.
+    const flash = document.getElementById('reduceFlash');
+    if (flash) {
+      const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const apply = () => this.visualizer.setFlashIntensity(flash.checked ? 0.15 : 1);
+      flash.checked = query.matches;
+      apply();
+      flash.addEventListener('change', apply);
+      query.addEventListener?.('change', (e) => { flash.checked = e.matches; apply(); });
+    }
+  }
+
+  setTransport(label, running) {
+    const text = this.startBtn?.querySelector('.transport-label');
+    if (text) text.textContent = label;
+    if (running !== undefined) {
+      document.body.dataset.running = running ? 'true' : 'false';
+    }
+  }
+
   updateBPM(bpm) {
     if (this.bpmCounter) {
-      this.bpmCounter.textContent = `BPM: ${bpm || '--'}`;
-      console.log(`UI BPM Display: ${bpm || '--'}`);
+      // The label lives in the markup; the readout carries the number alone.
+      this.bpmCounter.textContent = bpm || '—';
     }
-    
-    // Flash beat indicator when BPM is detected
-    if (bpm > 0 && this.beatIndicator) {
-      this.beatIndicator.classList.add('flash');
-      setTimeout(() => {
-        this.beatIndicator.classList.remove('flash');
-      }, 150);
-    }
+  }
+
+  // Driven by AudioProcessor.onBeat — once per confirmed beat, not once per
+  // audio frame. The previous version ran here 60 times a second and left the
+  // indicator permanently lit with ~9 removal timers always pending.
+  pulseBeatIndicator() {
+    if (!this.beatIndicator) return;
+    this.beatIndicator.classList.add('flash');
+    clearTimeout(this.beatTimer);
+    this.beatTimer = setTimeout(() => {
+      this.beatIndicator.classList.remove('flash');
+    }, 60);
   }
 
   toggleHelp() {
-    const helpOverlay = document.getElementById('helpOverlay');
-    if (helpOverlay) {
-      helpOverlay.style.display = helpOverlay.style.display === 'none' ? 'flex' : 'none';
-    }
+    const overlay = document.getElementById('helpOverlay');
+    if (!overlay) return;
+    overlay.classList.contains('is-open') ? this.hideHelp() : this.showHelp();
+  }
+
+  showHelp() {
+    const overlay = document.getElementById('helpOverlay');
+    if (!overlay) return;
+    this.helpReturnFocus = document.activeElement;
+    // aria-modal only while it actually is one.
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.classList.add('is-open');
+    document.getElementById('helpClose')?.focus();
   }
 
   hideHelp() {
-    const helpOverlay = document.getElementById('helpOverlay');
-    if (helpOverlay) {
-      helpOverlay.style.display = 'none';
-    }
+    const overlay = document.getElementById('helpOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('is-open');
+    overlay.removeAttribute('aria-modal');
+    this.helpReturnFocus?.focus?.();
+    this.helpReturnFocus = null;
   }
 
   updateFPS() {
@@ -455,7 +497,7 @@ class DJVisualizerApp {
     
     if (currentTime - this.lastFrameTime >= 1000) {
       const fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFrameTime));
-      this.fpsCounter.textContent = `FPS: ${fps}`;
+      this.fpsCounter.textContent = fps;
       this.frameCount = 0;
       this.lastFrameTime = currentTime;
     }
@@ -471,8 +513,18 @@ class DJVisualizerApp {
 let djApp;
 
 document.addEventListener('DOMContentLoaded', async () => {
-  djApp = new DJVisualizerApp();
-  await djApp.init();
+  try {
+    djApp = new DJVisualizerApp();
+    await djApp.init();
+  } catch (error) {
+    // Without this the rejection is swallowed and the operator gets a dead UI
+    // with no explanation — the exact failure a missing dependency produces.
+    console.error('Startup failed:', error);
+    const status = document.getElementById('deviceStatus');
+    if (status) status.textContent = `Startup failed: ${error.message}`;
+    const hint = document.getElementById('stageHint');
+    if (hint) hint.textContent = 'Startup failed. Reload, and check the browser console.';
+  }
 });
 
 // Clean up on page unload
