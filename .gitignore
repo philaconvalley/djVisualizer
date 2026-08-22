@@ -5,3 +5,9 @@
 .claude/
 .vscode/
 node_modules/
+.vercel/
+
+# Secrets / logs
+.env
+.env.*
+*.log
