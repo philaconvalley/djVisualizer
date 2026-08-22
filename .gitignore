@@ -6,6 +6,11 @@
 .vscode/
 node_modules/
 
+# Secrets / logs
+.env
+.env.*
+*.log
+
 # Impeccable design tooling (local session state, not product)
 .impeccable/
 
