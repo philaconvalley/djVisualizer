@@ -138,6 +138,12 @@ thing to look at, because "it looked fine" is not a check.
 8. **Toggle Reduce flash.** Confirm the beat accents visibly damp. This is a
    safety control, not a preference — see below.
 
+This checklist is eyeball-the-readout by design — fast, no setup. For a
+number worth citing (a p50/p05 FPS figure in a ticket, a before/after
+comparison), load `test/hardware-probe.js` from the console instead and run
+`hw.init()` / `hw.sweep()`; see the file header for usage. Record results in
+`docs/hardware-checks/`.
+
 ## Adding a visualization mode
 
 1. Add an `<option>` to `#visualMode` in `index.html`. Keys 1–9 then 0 map to
