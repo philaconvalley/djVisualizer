@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Git worktree slots (local workspaces, not repo content)
+.worktrees/
+
 # Editor / tooling
 .claude/
 .vscode/
