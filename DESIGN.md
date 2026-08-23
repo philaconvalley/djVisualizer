@@ -57,6 +57,8 @@ These are Apple's dark-mode system colors, chosen for fidelity to the pin rather
 
 This replaces an earlier arrangement in which the eight canvas modes each carried their own RGB triples, and Polygon Collage reached for pure red, green, blue, yellow, cyan, magenta and white — on the one mode the documented meetup demo ends on.
 
+**Restraint also governs error presentation.** The error banner (PHI-159) stays achromatic — `--material-solid` and `--label` tokens only, never `--bass`/`--mid`/`--high` — because red is already load-bearing as the bass identity. Borrowing it for alarm would make the banner read as a fourth band. An icon plus copy carries the alert, not hue; this also keeps the signal readable without relying on color alone.
+
 ### Label colors
 
 | Token | Value | Contrast note |
@@ -99,6 +101,7 @@ Tinted from the foreground, never flat gray. `--label-2` and `--label-3` were ra
 | Ghost button | `.ghost` | Secondary actions: fullscreen, help, close. |
 | Toggle | `.toggle` | Safety and preference switches that must stay visible. |
 | Dialog | `.help-overlay` + `.help-content` | Centered, `aria-modal` only while open, closable three ways. |
+| Error banner | `.error-banner` | Non-modal, `role="alert"`. A conditional row inside `.console`, not a floating layer — never blocks mode switching or the gain sliders. Achromatic (see Color strategy above); an icon plus copy carries the alert, never hue. Closable manually; an auto-dismiss timer cancels on hover or focus so an operator who looked away can still read it. |
 
 New components inherit this vocabulary: filled neutral grounds at `rgba(120,120,128,0.24)`, no borders, one elevation, pills for small controls and 14px radii for panels. A component that introduces a border weight or container style not listed here is drift.
 
@@ -108,6 +111,7 @@ New components inherit this vocabulary: filled neutral grounds at `rgba(120,120,
 - `--rail-h` is **measured, not declared**. `setupConsoleChrome()` syncs it from the console's real height via `ResizeObserver`. A hard-coded value painted the stage hint behind the console whenever the rail wrapped.
 - The rail holds four groups: transport and source, the three-band instrument, mode and readout, and the media section which exists only in `custom` mode.
 - The rail is capped to a single row at laptop widths (`--bands` max 420px). Two rows doubles the chrome and breaks the reduction.
+- The error banner (`.error-banner`, PHI-159) is a conditional fifth row, built the same way `.console-group--media` already is: `flex-basis: 100%`, hidden by default, and a child of `.console`. Because `--rail-h` is measured from the console's real height via `ResizeObserver`, a banner living inside `.console` is picked up automatically — no second measurement path, no new fixed-position layer. It appears above the four control groups, closest to where attention already is.
 
 ### The three-band instrument
 
@@ -196,6 +200,8 @@ Governed by `animate`. Every value comes from its tables; none are invented.
 - Help overlay: opacity plus `scale(0.96 → 1)` at 200ms, materializing with the backdrop. Centered, not scaled from a trigger — modals are exempt from trigger-anchored origin.
 
 Hover is gated behind `@media (hover: hover) and (pointer: fine)` so touch does not fire false hovers.
+
+- **Error banner:** a toast-style reveal, not the help dialog's centered scale — it is a row insert in the console's flex flow, not an anchored overlay. `opacity: 0` plus `translateY(6px)` to `opacity: 1` / `translateY(0)` on the existing `--overlay` (200ms) / `--ease-out` tokens, no new values. `.is-open` is added a frame after `[hidden]` clears, so the pre-transition state is committed first. `hideError()` reads `--overlay` back out of the computed style before removing the element from flow, so the exit is never cut short if the token changes. Under `prefers-reduced-motion`, the slide drops and the fade stays — reduced motion in this product means reduced *flashing*, never stillness.
 
 ## Accessibility
 

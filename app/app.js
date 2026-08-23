@@ -27,12 +27,30 @@ class DJVisualizerApp {
     this.bpmCounter = document.getElementById('bpmCounter');
     this.beatIndicator = document.getElementById('beatIndicator');
     this.fpsCounter = document.getElementById('fpsCounter');
+    this.errorBanner = document.getElementById('errorBanner');
+    this.errorBannerMessage = document.getElementById('errorBannerMessage');
+    this.errorBannerTimer = null;
+    this.errorBannerHideTimeout = null;
+    // Read the transition duration from the token itself rather than
+    // hardcoding it a second time — see DESIGN.md's Motion section.
+    this.errorBannerTransitionMs = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--overlay')
+    ) || 200;
 
     // Set up event listeners
     this.startBtn.addEventListener('click', () => this.toggleAudio());
     this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
     this.audioInputSelect.addEventListener('change', () => this.onDeviceSelectionChange());
-    
+
+    // Error banner: manual close, plus an auto-dismiss timer that pauses
+    // while the operator is actually looking at it (hover or focus), so
+    // someone who looked away can still come back and read it.
+    document.getElementById('errorBannerClose')?.addEventListener('click', () => this.hideError());
+    this.errorBanner.addEventListener('mouseenter', () => this.pauseErrorDismissTimer());
+    this.errorBanner.addEventListener('mouseleave', () => this.armErrorDismissTimer());
+    this.errorBanner.addEventListener('focusin', () => this.pauseErrorDismissTimer());
+    this.errorBanner.addEventListener('focusout', () => this.armErrorDismissTimer());
+
     // Set up gain controls
     this.setupGainControls();
     this.setupConsoleChrome();
@@ -80,6 +98,7 @@ class DJVisualizerApp {
         case 'Escape':
           e.preventDefault();
           this.hideHelp();
+          this.hideError();
           break;
       }
     });
@@ -241,7 +260,7 @@ class DJVisualizerApp {
     } catch (error) {
       console.error('Failed to restart audio with new device:', error);
       this.stopAudio();
-      alert('Failed to switch audio device. Please try again.');
+      this.showError('Failed to switch audio device. Please try again.');
     }
   }
 
@@ -278,30 +297,70 @@ class DJVisualizerApp {
       console.error('Failed to start audio:', error);
       this.setTransport('Start', false);
       this.startBtn.disabled = false;
-      
-      // Provide specific error messages based on error type
-      let errorMessage = 'Failed to start audio: ';
-      let statusMessage = 'Audio failed';
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage += 'Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow access.';
-        statusMessage = 'Permission denied';
-      } else if (error.name === 'NotFoundError') {
-        errorMessage += 'No audio input device found. Please connect a microphone or audio device.';
-        statusMessage = 'No device found';
-      } else if (error.name === 'NotReadableError') {
-        errorMessage += 'Audio device is busy. Please close other applications using the microphone.';
-        statusMessage = 'Device busy';
-      } else if (error.name === 'OverconstrainedError') {
-        errorMessage += 'Selected audio device is not available. Try selecting a different device.';
-        statusMessage = 'Device unavailable';
-      } else {
-        errorMessage += error.message || 'Unknown error occurred.';
-        statusMessage = 'Error occurred';
-      }
-      
-      this.deviceStatusSpan.textContent = statusMessage;
-      alert(errorMessage);
+
+      // One message, not two: the detail lives in the error banner where
+      // there is room for it. #deviceStatus keeps a fixed narrow layout, so
+      // it gets a short generic word rather than a second hand-maintained
+      // string that could drift out of sync with this one.
+      this.deviceStatusSpan.textContent = 'Audio error';
+      this.showError(this.describeAudioStartError(error));
+    }
+  }
+
+  // Preserved verbatim from the original alert() copy — only the delivery
+  // mechanism changed, not the mapping of error name to actionable text.
+  describeAudioStartError(error) {
+    let message = 'Failed to start audio: ';
+
+    if (error.name === 'NotAllowedError') {
+      message += 'Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow access.';
+    } else if (error.name === 'NotFoundError') {
+      message += 'No audio input device found. Please connect a microphone or audio device.';
+    } else if (error.name === 'NotReadableError') {
+      message += 'Audio device is busy. Please close other applications using the microphone.';
+    } else if (error.name === 'OverconstrainedError') {
+      message += 'Selected audio device is not available. Try selecting a different device.';
+    } else {
+      message += error.message || 'Unknown error occurred.';
+    }
+
+    return message;
+  }
+
+  showError(message) {
+    if (this.errorBannerHideTimeout) {
+      clearTimeout(this.errorBannerHideTimeout);
+      this.errorBannerHideTimeout = null;
+    }
+    this.errorBannerMessage.textContent = message;
+    this.errorBanner.hidden = false;
+    // Force layout so the browser commits the pre-transition state (opacity
+    // 0, translateY 6px) before .is-open flips it — otherwise both land in
+    // the same frame and there is nothing to transition from.
+    void this.errorBanner.offsetWidth;
+    this.errorBanner.classList.add('is-open');
+    this.armErrorDismissTimer();
+  }
+
+  hideError() {
+    this.pauseErrorDismissTimer();
+    if (this.errorBanner.hidden) return;
+    this.errorBanner.classList.remove('is-open');
+    this.errorBannerHideTimeout = setTimeout(() => {
+      this.errorBanner.hidden = true;
+      this.errorBannerHideTimeout = null;
+    }, this.errorBannerTransitionMs);
+  }
+
+  armErrorDismissTimer() {
+    this.pauseErrorDismissTimer();
+    this.errorBannerTimer = setTimeout(() => this.hideError(), 10000);
+  }
+
+  pauseErrorDismissTimer() {
+    if (this.errorBannerTimer) {
+      clearTimeout(this.errorBannerTimer);
+      this.errorBannerTimer = null;
     }
   }
 

@@ -180,6 +180,48 @@ body[data-running="true"] .stage-hint { opacity: 0; }
 
 .console-group--media[hidden] { display: none; }
 
+/* ---------- Error banner ---------- */
+
+/* A conditional row inside .console, built the same way as
+   .console-group--media: flex-basis 100% plus [hidden]. Living inside .console
+   means the ResizeObserver that measures --rail-h picks it up automatically —
+   no second layer, no separate safe-area wiring. Achromatic by design: red is
+   already the bass band's identity, so borrowing it for alarm would make the
+   banner read as a fourth band. The label and message carry the meaning. */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-basis: 100%;
+
+  /* Toast-style reveal, not the help dialog's centered scale — this is a row
+     insert in a flex flow, not an anchored overlay. Pre-transition state;
+     .is-open is added a frame after [hidden] is cleared. */
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--overlay) var(--ease-out),
+              transform var(--overlay) var(--ease-out);
+}
+
+.error-banner[hidden] { display: none; }
+
+.error-banner.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.error-banner-message {
+  flex: 1 1 auto;
+  /* Flex items default to min-width: auto, which refuses to shrink below the
+     text's intrinsic width — a long message would push the row past the
+     viewport instead of wrapping. Nothing here may overflow (see the 860px
+     breakpoint below). */
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--label);
+}
+
 /* ---------- Transport ---------- */
 
 .transport {
@@ -613,6 +655,10 @@ kbd {
      because colour is not movement. */
   .beat-indicator::after,
   .beat-indicator.flash::after { opacity: 0; }
+  /* Reduced motion here means reduced flashing, not stillness (see the
+     Accessibility section of DESIGN.md) — the fade stays, the slide drops. */
+  .error-banner,
+  .error-banner.is-open { transform: none; }
 }
 
 /* Desktop-first by design: this needs a hardware audio input and a large display.
