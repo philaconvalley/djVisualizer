@@ -49,9 +49,15 @@ path: a real `MediaStream`, a real `AudioContext`, a real `AnalyserNode`, the
 real FFT, the real DOM. Only the microphone is substituted.
 
 It checks that a 100 Hz tone lights bass and nothing else, that 1 kHz lights mid,
-that 10 kHz lights high, that a 120 BPM kick pattern is detected as roughly 120,
-that all ten modes paint pixels without throwing, and that the meters return to
-zero on stop. Screenshots of every mode land in `test/output/`.
+that 10 kHz lights high, that four kick patterns are detected at their real
+tempos, that all ten modes paint pixels without throwing, and that the meters
+return to zero on stop. Screenshots of every mode land in `test/output/`.
+
+One tempo fixture is not a bare kick. `kick-125bpm-bassline.wav` puts a bassline
+on the dotted eighth, in the same band as the kick, because a bare kick is the
+one signal a tempo estimator cannot get wrong — and a real 125 BPM track on the
+DDJ-REV1 read 147-158 while every bare-kick fixture passed. When you add a
+tempo fixture, make it something a DJ would actually play.
 
 Run it before opening a pull request. It has already caught band splits that were
 off by an order of magnitude and a beat detector that starved under render load —
@@ -117,9 +123,12 @@ thing to look at, because "it looked fine" is not a check.
    hats: only high should move. This is the same check the automated band tests
    do, on the real signal chain — and it is the one that catches a wiring or
    channel-mapping problem the tone tests never see.
-5. **Watch the BPM readout over a full track.** It should settle within a few
-   beats and stay there through a mix. It reads the kick from the audio thread,
-   so it should hold steady even when the visuals get heavy.
+5. **Watch the BPM readout over a full track, against the deck's own display.**
+   Write down what the deck says; an estimate compared against nothing proves
+   nothing. It should land within a few BPM and stay there. On a mix it takes
+   roughly the length of the onset window — about 12 seconds — to adopt the new
+   tempo. Pick a track with a busy bassline, not just a clean four-on-the-floor:
+   the failure this replaced only appeared on real music (PHI-175).
 6. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
    stall, and the FPS readout should stay usable. Spectrum and Particles are the
    documented safe modes on a slower machine.

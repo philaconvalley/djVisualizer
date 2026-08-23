@@ -270,6 +270,9 @@ try {
   await tempoTest('kick-85bpm.wav', 85);
   await tempoTest('kick-128bpm.wav', 128);
   await tempoTest('kick-174bpm.wav', 174);
+  // The hardware failure: a bassline in the same band as the kick, on the
+  // dotted eighth. The old estimator locked onto the bassline and read 156.
+  await tempoTest('kick-125bpm-bassline.wav', 125);
   await modeTest();
   await silenceTest();
 } finally {

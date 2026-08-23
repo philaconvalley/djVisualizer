@@ -93,6 +93,22 @@ class AudioProcessor {
     this.lastBeatEnergy = 0;
     this.lastAnalysisAt = 0;
 
+    // Every onset, with its amplitude, over the last few seconds. The tempo is
+    // read from this whole series rather than from consecutive gaps, because
+    // consecutive gaps cannot tell a kick from a bassline and this can.
+    this.onsets = [];
+    // ~25 beats at 125 BPM. Sized by evidence rather than by damping: at 8 s a
+    // track that drops every fourth kick made the estimate wander 13 BPM, and
+    // widening the window flattened it to nothing where extra smoothing did
+    // not. The pair loop stops at maxBeatInterval, so cost grows with the
+    // window's onset density, not its square.
+    this.onsetWindowMs = 12000;
+    // One kick spans several envelope samples. This rejects the same transient
+    // being counted twice — it is not a musical interval and must stay far
+    // below one, which is exactly where the old 300 ms guard went wrong.
+    this.onsetRefractoryMs = 90;
+    this.periodMs = 0;          // inferred beat period, unrounded
+
     // Envelope samples posted by the worklet, drained on the main thread.
     this.envelopeQueue = [];
     this.usingWorklet = false;
@@ -486,6 +502,8 @@ class AudioProcessor {
     this.beatHistory = [];
     this.bassWindow = [];
     this.envelopeQueue = [];
+    this.onsets = [];
+    this.periodMs = 0;
     this.lastBeatTime = 0;
     this.lastBeatEnergy = 0;
 
@@ -540,9 +558,23 @@ class AudioProcessor {
     }
   }
 
+  /* Onset detection and tempo estimation.
+   *
+   * These used to be one step: every accepted onset was a beat, and the tempo
+   * was the mean of the last six gaps between them. That works on a bare kick
+   * and fails on music. Measured on the DDJ-REV1, a 125 BPM track read 147-158
+   * and never settled, because the bassline sat on the dotted eighth (360 ms
+   * against the beat's 480 ms) and the detector locked onto it: the bass hit
+   * fired first, and the real kick 120 ms later was inside the 300 ms guard and
+   * thrown away. The guard meant to stop double-triggering was deleting the
+   * downbeat.
+   *
+   * So the two jobs are now separate. Onsets are recorded with their amplitude
+   * and nothing musical is inferred from any one of them; the period is voted
+   * on by the whole series. The kick wins that vote because it is louder, even
+   * though the bassline produces more onsets. PHI-175.
+   */
   detectBeat(now = performance.now(), energy = this.bass) {
-    // Beat times are reported on the same clock the samples carry, so a batch
-    // drained late still yields the intervals that actually occurred.
     const currentTime = now;
 
     // The reference the peak is measured against, held to a fixed span of real
@@ -561,45 +593,136 @@ class AudioProcessor {
     // Nothing below the floor is a beat, however quiet the running mean gets;
     // otherwise silence with a little noise in it reads as a groove.
     if (!rising || energy < this.beatFloor || energy < mean * this.beatRatio) return;
-    if (currentTime - this.lastBeatTime < this.minBeatInterval) return;
 
-    const interval = currentTime - this.lastBeatTime;
-    if (interval >= this.minBeatInterval && interval <= this.maxBeatInterval) {
-      this.beatHistory.push(interval);
-      if (this.beatHistory.length > 6) this.beatHistory.shift();
-
-      if (this.beatHistory.length >= 2) {
-        const avgInterval = this.beatHistory.reduce((a, b) => a + b) / this.beatHistory.length;
-        let instantBpm = 60000 / avgInterval;
-
-        // No octave correction. There used to be a rule doubling anything
-        // between 45 and 90 BPM, on the theory that a kick skipping the offbeat
-        // reads at half tempo. It cannot distinguish that case from a track
-        // genuinely at 85, so it corrupted real music: measured against a
-        // generated 85 BPM pattern it reported 171. Hip-hop, half-time and
-        // downtempo all live in the range it rewrote.
-        //
-        // Removing it is safe because the adaptive detector no longer needs
-        // rescuing — measured against generated patterns it now reads 85 as 85,
-        // 128 as 129 and 174 as 174, including the fast case the heuristic
-        // existed to protect. Guarded by the tempo checks in
-        // test/verify-audio.mjs; do not reintroduce doubling without evidence
-        // from an interval histogram.
-
-        this.bpm = Math.round(
-          this.bpm === 0
-            ? instantBpm
-            : this.bpm * (1 - this.bpmSmoothingFactor) + instantBpm * this.bpmSmoothingFactor
-        );
+    // Same transient, still rising: keep the loudest sample of it rather than
+    // recording two onsets a few milliseconds apart.
+    const previous = this.onsets[this.onsets.length - 1];
+    if (previous && currentTime - previous.t < this.onsetRefractoryMs) {
+      if (energy > previous.v) {
+        previous.t = currentTime;
+        previous.v = energy;
       }
+      return;
     }
 
-    this.lastBeatTime = currentTime;
+    this.onsets.push({ t: currentTime, v: energy });
+    while (this.onsets.length && currentTime - this.onsets[0].t > this.onsetWindowMs) {
+      this.onsets.shift();
+    }
 
-    // Emitted here, past the interval guard, so it fires exactly once per
-    // confirmed beat. Emitting from the energy test alone would burst across
-    // consecutive frames of the same kick.
+    const period = this.estimatePeriod();
+    if (period) {
+      this.periodMs = this.periodMs
+        ? this.periodMs * (1 - this.bpmSmoothingFactor) + period * this.bpmSmoothingFactor
+        : period;
+      this.bpm = Math.round(60000 / this.periodMs);
+    }
+
+    // Beat events stay on the onset stream and keep their own spacing rule, so
+    // the stage still accents what a listener hears as a hit. The interval
+    // guard lives here, where discarding a hit costs an accent, and no longer
+    // upstream of the tempo estimate, where it was costing the tempo.
+    if (currentTime - this.lastBeatTime < this.minBeatInterval) return;
+    this.lastBeatTime = currentTime;
     if (this.onBeat) this.onBeat(currentTime);
+  }
+
+  /* Amplitude-weighted autocorrelation over the onset series.
+   *
+   * Every pair of onsets within the plausible tempo range votes for the period
+   * equal to its spacing, weighted by the product of the two amplitudes. A
+   * candidate period is then scored by its own vote plus the votes at its
+   * multiples, so a period that explains the whole grid beats one that explains
+   * a third of it.
+   *
+   * Weighting by amplitude is the entire point. The syncopated bassline that
+   * broke the old estimator produces *more* onsets than the kick; it just
+   * produces quieter ones. Counting onsets picks the bassline. Weighting them
+   * picks the kick.
+   *
+   * No octave correction, and none is needed: a half-tempo candidate scores its
+   * own votes but misses every offbeat kick, and a double-tempo candidate finds
+   * nothing at the offbeat positions it predicts. The comment this replaces
+   * asked for an interval histogram before anyone reintroduced doubling; this
+   * is that histogram, and it makes doubling unnecessary rather than safe.
+   *
+   * The known bound: measured against a dotted-eighth bassline, this holds the
+   * true tempo while the bass stays at or under 80% of the kick's amplitude,
+   * and fails above 90%. The old estimator failed at 30%. At parity the two
+   * elements are indistinguishable by amplitude and nothing here can separate
+   * them — that would need a spectral or phase-based discriminator, which is a
+   * much larger change than this bug warrants.
+   */
+  estimatePeriod() {
+    const onsets = this.onsets;
+    // Two onsets can only ever agree with themselves. Wait for a real sample.
+    if (onsets.length < 8) return 0;
+
+    const BUCKET = 10;  // ms; finer than this is below the envelope's own rate
+    const min = this.minBeatInterval;
+    const max = this.maxBeatInterval;
+    const votes = new Map();
+
+    for (let i = 0; i < onsets.length; i++) {
+      for (let j = i + 1; j < onsets.length; j++) {
+        const gap = onsets[j].t - onsets[i].t;
+        if (gap < min) continue;
+        if (gap > max) break;  // onsets are in time order, so the rest are too
+        const bucket = Math.round(gap / BUCKET);
+        votes.set(bucket, (votes.get(bucket) || 0) + onsets[i].v * onsets[j].v);
+      }
+    }
+    if (!votes.size) return 0;
+
+    /* Votes within two buckets of the target, counted together.
+     *
+     * Without this the estimator halves some tempos, and the reason is pure
+     * arithmetic rather than music: the envelope arrives at ~93 Hz (~10.7 ms
+     * per sample), so when a beat period is not a clean multiple of that
+     * interval, the peak sample caught on one kick and the next fall at
+     * different phases and read back at different amplitudes — stably, not as
+     * noise, because the phase drift itself repeats every couple of beats.
+     * Measured at 128 BPM (469 ms) that put consecutive-beat gaps at 460 ms and
+     * 480 ms in strict alternation: a 2-bucket spread at 10 ms per bucket. A
+     * ±1-bucket merge catches only one side of that split, undercounts the true
+     * period, and hands the vote to its own 2x bucket, which was never split.
+     * 174 BPM (345 ms) splits by only 1 bucket, which is why a ±1 merge looked
+     * sufficient before broader hardware coverage found the wider case.
+     */
+    const RADIUS = 2;
+    const near = (bucket) => {
+      let sum = 0;
+      for (let k = -RADIUS; k <= RADIUS; k++) sum += votes.get(bucket + k) || 0;
+      return sum;
+    };
+
+    let best = 0;
+    let bestScore = 0;
+    for (const bucket of votes.keys()) {
+      // Its own votes, plus those at two and three times the period. A true
+      // beat period is spanned by pairs a bar apart as well as adjacent ones;
+      // a spurious one is not. Multiples are discounted so the harmonic
+      // support breaks ties rather than deciding the answer.
+      const score = near(bucket) + near(bucket * 2) / 2 + near(bucket * 3) / 3;
+      if (score > bestScore) {
+        bestScore = score;
+        best = bucket;
+      }
+    }
+    if (!best) return 0;
+
+    // Centroid of the winning bucket and its neighbours, so the answer is not
+    // snapped to the 10 ms grid. At 174 BPM one bucket is nearly 3 BPM. Same
+    // radius as near(), so the centroid draws from the same cluster that won.
+    let mass = 0;
+    let moment = 0;
+    for (let k = -RADIUS; k <= RADIUS; k++) {
+      const bucket = best + k;
+      const weight = votes.get(bucket) || 0;
+      mass += weight;
+      moment += weight * bucket;
+    }
+    return mass ? (moment / mass) * BUCKET : best * BUCKET;
   }
 
   getAudioData() {

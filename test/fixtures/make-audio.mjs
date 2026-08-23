@@ -67,6 +67,39 @@ function kickPattern(bpm, seconds) {
   return out;
 }
 
+/* A kick with a rolling bassline under it, which is what house music is and
+ * what none of the other fixtures are.
+ *
+ * Every other pattern here is a bare kick over a noise bed — the one signal a
+ * naive detector cannot get wrong. Real tracks put a bassline in the same
+ * band, and on the DDJ-REV1 a 125 BPM track read 147-158 because the detector
+ * locked onto that bassline instead of the kick.
+ *
+ * The bass sits on the dotted eighth (three sixteenths), the 3-against-4
+ * figure this genre is built on. It is deliberately quieter than the kick:
+ * amplitude is the only thing that distinguishes them, and the estimator has
+ * to use it. PHI-175.
+ */
+function kickWithSyncopatedBass(bpm, seconds, bassAmp = 0.5) {
+  const out = new Float32Array(Math.round(RATE * seconds));
+  const beat = (60 / bpm) * RATE;
+  const dotted = beat * 0.75;          // three sixteenths
+  const decay = 0.09;
+
+  for (let i = 0; i < out.length; i++) {
+    const intoKick = (i % Math.round(beat)) / RATE;
+    const kick = Math.sin(2 * Math.PI * 60 * intoKick) * Math.exp(-intoKick / decay) * 0.85;
+
+    // 90 Hz so it lands in the same band the kick does and the envelope
+    // follower cannot separate them by frequency.
+    const intoBass = (i % Math.round(dotted)) / RATE;
+    const bass = Math.sin(2 * Math.PI * 90 * intoBass) * Math.exp(-intoBass / decay) * 0.85 * bassAmp;
+
+    out[i] = kick + bass + (Math.random() - 0.5) * 0.015;
+  }
+  return out;
+}
+
 mkdirSync(HERE, { recursive: true });
 
 writeWav('tone-100hz.wav', tone(100, 6));    // squarely inside 20–250
@@ -80,3 +113,7 @@ writeWav('kick-120bpm.wav', kickPattern(120, 12));
 writeWav('kick-85bpm.wav', kickPattern(85, 24));
 writeWav('kick-128bpm.wav', kickPattern(128, 24));
 writeWav('kick-174bpm.wav', kickPattern(174, 24));
+
+// The case that actually failed on hardware. 125 BPM is a 480 ms beat; the
+// bassline sits at 360 ms, and the old estimator reported the bassline.
+writeWav('kick-125bpm-bassline.wav', kickWithSyncopatedBass(125, 24));
