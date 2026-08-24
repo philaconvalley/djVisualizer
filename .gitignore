@@ -27,3 +27,5 @@ test/output/
 
 # Written by the Netlify build so CI can tell which commit is live.
 build-info.json
+__pycache__/
+*.pyc
