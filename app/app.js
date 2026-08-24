@@ -334,11 +334,16 @@ class DJVisualizerApp {
     }
     this.errorBannerMessage.textContent = message;
     this.errorBanner.hidden = false;
-    // Force layout so the browser commits the pre-transition state (opacity
-    // 0, translateY 6px) before .is-open flips it — otherwise both land in
-    // the same frame and there is nothing to transition from.
-    void this.errorBanner.offsetWidth;
-    this.errorBanner.classList.add('is-open');
+    // Commit the pre-transition state (opacity 0, translateY 6px) in its own
+    // paint before .is-open flips it. A single reflow read is not always
+    // enough — some browsers still batch it with the same paint — so wait
+    // two animation frames: the first is guaranteed to run after the
+    // [hidden] removal has painted, the second is where .is-open lands.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.errorBanner.classList.add('is-open');
+      });
+    });
     this.armErrorDismissTimer();
   }
 

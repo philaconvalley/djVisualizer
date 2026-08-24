@@ -220,6 +220,10 @@ body[data-running="true"] .stage-hint { opacity: 0; }
   margin: 0;
   font-size: 14px;
   color: var(--label);
+  /* min-width: 0 lets the row shrink, but a single long unbroken token (a
+     URL, a device name) would still run past the edge without a break
+     point of its own. */
+  overflow-wrap: break-word;
 }
 
 /* ---------- Transport ---------- */
