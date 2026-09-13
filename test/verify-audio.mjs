@@ -11,9 +11,11 @@
  * this harness was written to catch, and which no amount of injected synthetic
  * `audioData` would ever have revealed.
  *
+ * Device *classification* is covered here, against the labels recorded during
+ * the PHI-171 hardware run — it is pure string logic and needs no hardware.
  * What this does NOT cover, and what still needs the controller in the room:
- * device enumeration and DDJ prioritisation, USB line level and gain staging,
- * sustained thermal performance, and the projector. See CONTRIBUTING.md.
+ * live device enumeration, USB line level and gain staging, sustained thermal
+ * performance, and the projector. See CONTRIBUTING.md.
  *
  *   node test/fixtures/make-audio.mjs && node test/verify-audio.mjs
  */
@@ -256,6 +258,114 @@ async function silenceTest() {
   });
 }
 
+/* Device labels observed on the DJ laptop during the PHI-171 hardware run.
+ *
+ * Three virtual audio drivers is a normal working DJ machine, not an exotic
+ * setup — Serato, BlackHole and Teams all install one. `Serato Virtual Audio`
+ * is the case that shipped the bug: it carries a DJ brand name and no signal.
+ */
+const OBSERVED_LABELS = [
+  'Serato Virtual Audio (Virtual)',
+  'BlackHole 64ch (Virtual)',
+  'Microsoft Teams Audio Device (Virtual)',
+  "Waskar's iPhone Microphone",
+  'MacBook Pro Microphone (Built-in)'
+];
+
+/* Recorded 2026-08-22 with the DDJ-REV1 connected, straight out of
+ * `enumerateDevices()`. Two details here are worth keeping:
+ *
+ * The controller's label is bare — `DDJ-REV1`, with no manufacturer and no
+ * model prefix. A keyword list built around "pioneer" would never match it.
+ *
+ * The built-in microphone arrives without the `(Built-in)` suffix that the
+ * other machine reports, so suffix-matching would misclassify it. It is caught
+ * by the "macbook" keyword instead, which is why that keyword has to stay.
+ */
+const CONTROLLER_LABELS = ['DDJ-REV1', '\u{1F32D}air\u{1F32D} Microphone', 'MacBook Pro Microphone'];
+
+async function withPage(run) {
+  const browser = await chromium.launch({
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
+           '--enable-unsafe-swiftshader']
+  });
+  const page = await browser.newPage();
+  await page.goto(BASE, { waitUntil: 'load' });
+  await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.audioProcessor);
+  try {
+    await run(page);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function deviceTest() {
+  console.log('\nDevice classification → a loopback is never the controller');
+  await withPage(async (page) => {
+    const classify = (labels) => page.evaluate((ls) => ls.map(label => ({
+      label,
+      rank: djApp.audioProcessor.deviceRank(label),
+      isDJ: djApp.audioProcessor.isDJDevice(label),
+      isVirtual: djApp.audioProcessor.isVirtualDevice(label)
+    })).sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)), labels);
+
+    // --- Controller absent: the state you are in at load-in ---
+    const absent = await classify(OBSERVED_LABELS);
+
+    const djVirtual = absent.filter(d => d.isVirtual && d.isDJ);
+    check('no virtual device is classified as DJ hardware',
+      djVirtual.length === 0, djVirtual.map(d => d.label).join(', ') || 'none');
+
+    const serato = absent.find(d => d.label.startsWith('Serato'));
+    check('Serato Virtual Audio is not prefixed "DJ ·"',
+      serato && !serato.isDJ, `isDJ=${serato && serato.isDJ}`);
+
+    const worstPhysical = Math.max(...absent.filter(d => !d.isVirtual).map(d => d.rank));
+    const bestVirtual = Math.min(...absent.filter(d => d.isVirtual).map(d => d.rank));
+    check('every physical input outranks every virtual device',
+      worstPhysical < bestVirtual, `physical<=${worstPhysical} virtual>=${bestVirtual}`);
+
+    check('auto-selection falls back to a physical input, not a loopback',
+      !absent[0].isVirtual, `selected ${absent[0].label}`);
+
+    // --- Controller present: the fix must not cost us the happy path ---
+    const present = await classify([...OBSERVED_LABELS, ...CONTROLLER_LABELS]);
+    check('the DDJ-REV1 still sorts first when connected',
+      present[0].label === 'DDJ-REV1' && present[0].isDJ, `selected ${present[0].label}`);
+    check('the DDJ-REV1 outranks every virtual device on the same machine',
+      present.filter(d => d.isVirtual).every(d => d.rank > present[0].rank),
+      `controller=${present[0].rank}`);
+
+    // The suffix-less built-in is a real label, not a hypothetical: the two
+    // machines on this project report their internal microphone differently.
+    const bare = present.find(d => d.label === 'MacBook Pro Microphone');
+    check('a built-in mic without the "(Built-in)" suffix is still built-in',
+      bare && !bare.isDJ && !bare.isVirtual && bare.rank === 5, `rank=${bare && bare.rank}`);
+
+    // --- One question, one answer ---
+    const drift = await page.evaluate(() => {
+      const p = djApp.audioProcessor;
+      // isDJDevice() must be exactly "deviceRank() reached a DJ tier", and
+      // findDJInput() must agree with it on the same list. If any of the three
+      // disagrees, the duplication PHI-172 removed has grown back.
+      const labels = ['DDJ-REV1', 'Serato Virtual Audio (Virtual)', 'MacBook Pro Microphone (Built-in)'];
+      const inputs = labels.map(label => {
+        const rank = p.deviceRank(label);
+        return { label, deviceId: label, rank, isDJ: p.isDJDevice(label) };
+      }).sort((a, b) => a.rank - b.rank);
+      const found = p.findDJInput(inputs);
+      return {
+        mismatched: inputs.filter(d => d.isDJ !== (d.rank <= 3)).map(d => d.label),
+        found: found && found.label
+      };
+    });
+    check('isDJDevice() and deviceRank() cannot disagree',
+      drift.mismatched.length === 0, drift.mismatched.join(', ') || 'consistent');
+    check('findDJInput() returns the top-ranked DJ device',
+      drift.found === 'DDJ-REV1', `got ${drift.found}`);
+  });
+}
+
 const server = await serve();
 try {
   if (!existsSync(join(HERE, 'fixtures', 'tone-100hz.wav'))) {
@@ -263,6 +373,7 @@ try {
     process.exit(1);
   }
 
+  await deviceTest();
   await bandTest('tone-100hz.wav', 'bass', 100);
   await bandTest('tone-1khz.wav', 'mid', 1000);
   await bandTest('tone-10khz.wav', 'high', 10000);

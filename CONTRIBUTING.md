@@ -101,9 +101,19 @@ there because a check that runs seconds after a merge would otherwise test the
 checked. That is the same class of false signal the smoke check exists to
 catch, and it would have been embarrassing to build it in.
 
-**What it does not cover.** Device enumeration and DJ-hardware prioritisation,
-USB line level and gain staging, sustained thermal behaviour, and the projector.
-Those still need the controller in the room; see the checklist below.
+**What it does not cover.** Live device enumeration, USB line level and gain
+staging, sustained thermal behaviour, and the projector. Those still need the
+controller in the room; see the checklist below.
+
+Device *classification* — which labels count as DJ hardware, and how they rank
+against microphones and loopbacks — is covered, because it is pure string logic
+over `deviceRank()`. The assertions run against labels recorded from real
+machines — the PHI-171 hardware run with no controller attached, and a
+2026-08-22 reading with the DDJ-REV1 connected. Add to those lists rather than
+inventing labels; the two recordings already disagree about whether the
+built-in microphone carries a `(Built-in)` suffix, and that kind of variation
+is the entire risk. Enumeration itself, meaning what Chrome actually reports
+for a controller on the bus, is still a hardware question.
 
 ## Hardware check before a show
 
@@ -115,27 +125,35 @@ thing to look at, because "it looked fine" is not a check.
    listed until you reload.
 2. **Confirm the source.** The controller should already be selected, prefixed
    `DJ ·`, and listed above the built-in microphone. If it is not, the label did
-   not match `isDJDevice()` and the prefix list needs the new name.
-3. **Start, and watch the three meters with music playing.** All three should
+   not match `deviceRank()` and the keyword list needs the new name. Note that
+   `deviceRank()` rejects virtual devices *before* it reads a brand name, so a
+   controller whose label contains "virtual" will not be matched — that is
+   deliberate, and it is what stops `Serato Virtual Audio` being offered as
+   your controller when nothing is plugged in (PHI-172).
+3. **Confirm the fallback, with the controller unplugged.** Reload with nothing
+   connected. The rail must say `No DJ hardware found` and select a real
+   microphone. If it says `Ready:` for something ending in `(Virtual)`, the
+   classification has regressed and the stage will be silent.
+4. **Start, and watch the three meters with music playing.** All three should
    move independently. If bass moves and the others sit still, the input is
    likely mono-summed or the mixer's output level is low.
-4. **Solo the bass on the mixer.** Only the bass meter should move. Then solo the
+5. **Solo the bass on the mixer.** Only the bass meter should move. Then solo the
    hats: only high should move. This is the same check the automated band tests
    do, on the real signal chain — and it is the one that catches a wiring or
    channel-mapping problem the tone tests never see.
-5. **Watch the BPM readout over a full track, against the deck's own display.**
+6. **Watch the BPM readout over a full track, against the deck's own display.**
    Write down what the deck says; an estimate compared against nothing proves
    nothing. It should land within a few BPM and stay there. On a mix it takes
    roughly the length of the onset window — about 12 seconds — to adopt the new
    tempo. Pick a track with a busy bassline, not just a clean four-on-the-floor:
    the failure this replaced only appeared on real music (PHI-175).
-6. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
+7. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
    stall, and the FPS readout should stay usable. Spectrum and Particles are the
    documented safe modes on a slower machine.
-7. **Go fullscreen and check the projector, not the laptop.** Confirm the console
+8. **Go fullscreen and check the projector, not the laptop.** Confirm the console
    rail is legible from the back of the room and that nothing important sits
    underneath it.
-8. **Toggle Reduce flash.** Confirm the beat accents visibly damp. This is a
+9. **Toggle Reduce flash.** Confirm the beat accents visibly damp. This is a
    safety control, not a preference — see below.
 
 ## Adding a visualization mode

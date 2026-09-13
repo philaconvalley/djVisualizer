@@ -180,19 +180,19 @@ class DJVisualizerApp {
         this.audioInputSelect.appendChild(option);
       });
       
-      // Auto-select preferred input (prioritizes DJ devices)
-      const preferredInput = this.audioProcessor.findDJInput(inputs);
-      if (preferredInput) {
-        this.audioInputSelect.value = preferredInput.deviceId;
-        this.selectedDeviceId = preferredInput.deviceId;
-        this.deviceStatusSpan.textContent = `Ready: ${preferredInput.label}`;
-        console.log('Auto-selected preferred input:', preferredInput.label);
-      } else if (inputs.length > 0) {
-        // Default to first available input if no DJ device found
-        this.audioInputSelect.value = inputs[0].deviceId;
-        this.selectedDeviceId = inputs[0].deviceId;
-        this.deviceStatusSpan.textContent = `Ready: ${inputs[0].label}`;
-        console.log('Auto-selected first available input:', inputs[0].label);
+      // Inputs arrive rank-sorted, so the best available device is the first
+      // one either way. What changes is what we tell the operator: falling
+      // back to a microphone is not the same as finding the controller, and
+      // saying so at load-in is the warning PHI-172 found missing.
+      const djInput = this.audioProcessor.findDJInput(inputs);
+      const selected = djInput || inputs[0];
+      if (selected) {
+        this.audioInputSelect.value = selected.deviceId;
+        this.selectedDeviceId = selected.deviceId;
+        this.deviceStatusSpan.textContent = djInput
+          ? `Ready: ${selected.label}`
+          : `No DJ hardware found - using ${selected.label}`;
+        console.log('Auto-selected input:', selected.label, '(rank', selected.rank + ')');
       }
       
     } catch (error) {
