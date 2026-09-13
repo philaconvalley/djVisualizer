@@ -17,18 +17,21 @@ checklist in `CONTRIBUTING.md`'s "Hardware check before a show" section.
 
 ## Sweep results
 
-| Mode | p50 FPS | p05 FPS | Samples |
-|------|---------|---------|---------|
-| spectrum | | | |
-| particles | | | |
-| rings | | | |
-| waves | | | |
-| mandala | | | |
-| tunnel | | | |
-| galaxy | | | |
-| polygons | | | |
-| flow | | | |
-| custom | (skipped unless media loaded) | | |
+A non-zero "Skipped" cell means the tab was hidden or the window lost focus
+during that mode. Re-run the sweep before recording that row.
+
+| Mode | p50 FPS | p05 FPS | Samples | Skipped (hidden/unfocused) |
+|------|---------|---------|---------|----------------------------|
+| spectrum | | | | |
+| particles | | | | |
+| rings | | | | |
+| waves | | | | |
+| mandala | | | | |
+| tunnel | | | | |
+| galaxy | | | | |
+| polygons | | | | |
+| flow | | | | |
+| custom | (skipped unless media loaded) | | | |
 
 ## Manual checklist (CONTRIBUTING.md)
 

@@ -9,6 +9,8 @@
 // Run this against real audio (Start already clicked, controller playing
 // music) and leave the browser tab frontmost and untouched for the whole
 // sweep — see PHI-174 and CONTRIBUTING.md's "Hardware check before a show".
+// After typing the sweep command, click the page itself: focus left in
+// DevTools throttles the page, and the probe skips those frames.
 //
 // This is a classic script's global `djApp` (declared with `let` in
 // app/app.js) referenced from a module. That works because a page's global
@@ -20,48 +22,80 @@ const DEFAULT_WINDOW_MS = 5000;
 
 let sampler = null;
 
-// A frame is excluded from the FPS calculation if the tab was hidden at any
-// point since the previous sample. A naive requestAnimationFrame-driven
-// sampler keeps ticking while backgrounded (at a throttled rate on most
-// browsers), which would silently understate the real drop this probe
-// exists to catch.
+// A frame is excluded from the FPS calculation if the tab was hidden, or the
+// window was unfocused, at any point since the previous frame. Two traps:
+//
+// - Hidden: Chrome stops calling requestAnimationFrame entirely, so the first
+//   frame back would otherwise record the whole hidden stretch as one interval
+//   (a 2 s alt-tab becomes one 0.5 FPS sample and drags p05 down).
+// - Unfocused: an unfocused Chrome window throttles to ~25 FPS while
+//   document.hidden stays false. Typing hw.sweep() into undocked DevTools
+//   unfocuses the page, and the throttled number looks exactly like a real
+//   stall.
+//
+// The sampler stores intervals, not timestamps. After any skipped frame it
+// forgets the previous timestamp, so no interval ever spans a gap.
 function createSampler() {
   const state = {
     active: false,
     mode: null,
-    frameTimes: [],
-    lastWasHidden: false,
+    intervals: [],
+    prevTime: null,
+    wasHidden: false,
+    wasUnfocused: false,
+    skippedHidden: 0,
+    skippedUnfocused: 0,
   };
 
   const onVisibilityChange = () => {
-    if (document.hidden) state.lastWasHidden = true;
+    if (document.hidden) state.wasHidden = true;
+  };
+  const onBlur = () => {
+    state.wasUnfocused = true;
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('blur', onBlur);
 
   return {
     state,
     onFrame() {
       if (!state.active) return;
       const now = performance.now();
-      if (document.hidden || state.lastWasHidden) {
-        // Skip this sample; the next one starts a clean window.
-        state.lastWasHidden = document.hidden;
+      const hidden = document.hidden || state.wasHidden;
+      const unfocused = !document.hasFocus() || state.wasUnfocused;
+      if (hidden || unfocused) {
+        if (hidden) state.skippedHidden++;
+        else state.skippedUnfocused++;
+        state.wasHidden = document.hidden;
+        state.wasUnfocused = !document.hasFocus();
+        // Break the chain: the next good frame has no previous timestamp.
+        state.prevTime = null;
         return;
       }
-      state.frameTimes.push(now);
+      if (state.prevTime !== null) state.intervals.push(now - state.prevTime);
+      state.prevTime = now;
     },
     startWindow(mode) {
       state.mode = mode;
-      state.frameTimes = [];
-      state.lastWasHidden = document.hidden;
+      state.intervals = [];
+      state.prevTime = null;
+      state.wasHidden = document.hidden;
+      state.wasUnfocused = !document.hasFocus();
+      state.skippedHidden = 0;
+      state.skippedUnfocused = 0;
       state.active = true;
     },
     stopWindow() {
       state.active = false;
-      return state.frameTimes.slice();
+      return {
+        intervals: state.intervals.slice(),
+        skippedHidden: state.skippedHidden,
+        skippedUnfocused: state.skippedUnfocused,
+      };
     },
     destroy() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
     },
   };
 }
@@ -72,25 +106,22 @@ function percentile(sortedAsc, p) {
   return sortedAsc[idx];
 }
 
-// Converts a series of frame timestamps into per-frame instantaneous FPS
-// values, then reduces to p50/p05. p05 (the 5th percentile — the bad end of
-// the distribution, not the top) is what PHI-174's Definition of Done gates
-// on, because a mode that is smooth 95% of the time and stutters hard for
-// the rest still reads badly to someone watching it.
-function summarize(frameTimes) {
-  if (frameTimes.length < 2) {
-    return { samples: frameTimes.length, p50: null, p05: null };
-  }
-  const fpsValues = [];
-  for (let i = 1; i < frameTimes.length; i++) {
-    const dt = frameTimes[i] - frameTimes[i - 1];
-    if (dt > 0) fpsValues.push(1000 / dt);
-  }
+// Converts frame intervals into per-frame instantaneous FPS values, then
+// reduces to p50/p05. p05 (the 5th percentile — the bad end of the
+// distribution, not the top) is what PHI-174's Definition of Done gates on,
+// because a mode that is smooth 95% of the time and stutters hard for the
+// rest still reads badly to someone watching it.
+function summarize({ intervals, skippedHidden, skippedUnfocused }) {
+  const fpsValues = intervals.filter((dt) => dt > 0).map((dt) => 1000 / dt);
   fpsValues.sort((a, b) => a - b);
+  const skipped = skippedHidden + skippedUnfocused;
   return {
     samples: fpsValues.length,
-    p50: Math.round(percentile(fpsValues, 50) * 10) / 10,
-    p05: Math.round(percentile(fpsValues, 5) * 10) / 10,
+    p50: fpsValues.length ? Math.round(percentile(fpsValues, 50) * 10) / 10 : null,
+    p05: fpsValues.length ? Math.round(percentile(fpsValues, 5) * 10) / 10 : null,
+    skippedHidden,
+    skippedUnfocused,
+    clean: skipped === 0,
   };
 }
 
@@ -136,8 +167,14 @@ export async function sweep({ windowMs = DEFAULT_WINDOW_MS, includeCustom = fals
     await wait(300);
     sampler.startWindow(mode);
     await wait(windowMs);
-    const frameTimes = sampler.stopWindow();
-    results[mode] = summarize(frameTimes);
+    results[mode] = summarize(sampler.stopWindow());
+    if (!results[mode].clean) {
+      console.warn(
+        `[hardware-probe] ${mode}: skipped ${results[mode].skippedHidden} hidden and ` +
+          `${results[mode].skippedUnfocused} unfocused frames. Click the page and keep it ` +
+          'focused, then re-run the sweep before recording this mode.'
+      );
+    }
   }
 
   return {
@@ -152,11 +189,12 @@ export function toMarkdownTable(sweepResult) {
   const lines = [
     `Surface: ${sweepResult.surface.width}x${sweepResult.surface.height} @ ${sweepResult.surface.devicePixelRatio}x — ${sweepResult.timestamp}`,
     '',
-    '| Mode | p50 FPS | p05 FPS | Samples |',
-    '|------|---------|---------|---------|',
+    '| Mode | p50 FPS | p05 FPS | Samples | Skipped (hidden/unfocused) |',
+    '|------|---------|---------|---------|----------------------------|',
   ];
   for (const [mode, r] of Object.entries(sweepResult.results)) {
-    lines.push(`| ${mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.samples} |`);
+    const skipped = r.clean ? '0' : `${r.skippedHidden}/${r.skippedUnfocused} — re-run`;
+    lines.push(`| ${mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.samples} | ${skipped} |`);
   }
   return lines.join('\n');
 }
