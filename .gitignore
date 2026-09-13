@@ -14,8 +14,10 @@ node_modules/
 .env.*
 *.log
 
-# Impeccable design tooling (local session state, not product)
-.impeccable/
+# Impeccable design tooling: config.json is shared project config (detector
+# settings, hook toggle) and should be committed; only the per-developer
+# override file is local state.
+.impeccable/config.local.json
 
 # Playwright scratch
 .playwright-mcp/
