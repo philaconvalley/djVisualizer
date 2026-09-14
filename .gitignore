@@ -16,8 +16,9 @@ node_modules/
 
 # Impeccable design tooling: config.json is shared project config (detector
 # settings, hook toggle) and should be committed; only the per-developer
-# override file is local state.
+# override file and the per-session question pages are local state.
 .impeccable/config.local.json
+.impeccable/questions/
 
 # Playwright scratch
 .playwright-mcp/
