@@ -35,6 +35,12 @@
     </main>
 
     <div class="console" role="group" aria-label="Visualizer controls">
+      <div class="error-banner" id="errorBanner" role="alert" hidden>
+        <span class="field-label">Error</span>
+        <p class="error-banner-message" id="errorBannerMessage"></p>
+        <button class="ghost" id="errorBannerClose" type="button">Dismiss</button>
+      </div>
+
       <section class="console-group console-group--transport">
         <button id="start" class="transport" type="button">
           <span class="transport-dot" aria-hidden="true"></span>

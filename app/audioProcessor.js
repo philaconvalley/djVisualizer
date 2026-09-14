@@ -12,6 +12,23 @@ const BANDS = [
   { name: 'high', from: 4000, to: 20000, trim: 2.4 },
 ];
 
+/* Input preference, lower being better. Every DJ tier is physical hardware by
+ * construction — deviceRank() rejects virtual devices before it reads a brand
+ * name — so a loopback can never be offered as the controller. The gap between
+ * BUILT_IN and VIRTUAL is the ordering the operator actually needs at load-in:
+ * with nothing plugged in, they get a microphone that is audibly wrong rather
+ * than a driver that is silently wrong. PHI-172.
+ */
+const RANK = {
+  DJ_DDJ_REV1: 0,
+  DJ_DDJ:      1,
+  DJ_PIONEER:  2,
+  DJ_OTHER:    3,
+  PHYSICAL:    4,
+  BUILT_IN:    5,
+  VIRTUAL:     6,
+};
+
 /* Kick envelope follower, run on the audio thread.
  *
  * Beat detection used to read the same main-thread FFT the visuals read, which
@@ -179,31 +196,43 @@ class AudioProcessor {
       seenLabels.add(label);
       seenDeviceIds.add(device.deviceId);
       
+      const rank = this.deviceRank(label);
       processedInputs.push({
         deviceId: device.deviceId,
         label: label,
         groupId: device.groupId,
-        isDJ: this.isDJDevice(label),
+        rank: rank,
+        isDJ: rank <= RANK.DJ_OTHER,
+        isVirtual: this.isVirtualDevice(label),
         isBuiltIn: this.isBuiltInDevice(label)
       });
     });
     
-    // Sort inputs: DJ devices first, then built-in, then others
-    processedInputs.sort((a, b) => {
-      if (a.isDJ && !b.isDJ) return -1;
-      if (!a.isDJ && b.isDJ) return 1;
-      if (a.isBuiltIn && !b.isBuiltIn) return 1;
-      if (!a.isBuiltIn && b.isBuiltIn) return -1;
-      return a.label.localeCompare(b.label);
-    });
+    // One rank decides the order, so the dropdown and the auto-selection can
+    // never disagree about which device is best. Ties sort by label.
+    processedInputs.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
     
     console.log('Processed audio inputs:', processedInputs);
     return processedInputs;
   }
 
+  // A software loopback is not an input. It carries whatever another
+  // application chooses to send it, which at load-in is silence — and silence
+  // that presents as a working device costs more than an obvious failure. A
+  // label matching any of these is never physical hardware, whatever brand
+  // name it also carries: `Serato Virtual Audio` is Serato's driver, not
+  // Serato's mixer. PHI-172.
+  isVirtualDevice(label) {
+    const virtualKeywords = [
+      'virtual', 'loopback', 'blackhole', 'soundflower',
+      'aggregate', 'multi-output'
+    ];
+    const lower = label.toLowerCase();
+    return virtualKeywords.some(keyword => lower.includes(keyword));
+  }
+
   isDJDevice(label) {
-    const djKeywords = ['ddj', 'pioneer', 'serato', 'traktor', 'rekordbox', 'djm', 'cdj'];
-    return djKeywords.some(keyword => label.toLowerCase().includes(keyword));
+    return this.deviceRank(label) <= RANK.DJ_OTHER;
   }
 
   isBuiltInDevice(label) {
@@ -211,20 +240,39 @@ class AudioProcessor {
     return builtInKeywords.some(keyword => label.toLowerCase().includes(keyword));
   }
 
+  /* The single answer to "how good is this input?", lower being better.
+   *
+   * This used to be two answers: a keyword boolean driving the `DJ ·` label and
+   * the sort, and a separate regex ladder in findDJInput() driving the
+   * auto-selection. Two places deciding one question is how they drift, and
+   * both were wrong in the same way — neither could tell a controller from a
+   * driver with the controller's name on it.
+   */
+  deviceRank(label) {
+    const lower = label.toLowerCase();
+
+    // Checked before any brand keyword, so no virtual device can reach a DJ
+    // tier. This is the whole of the PHI-172 fix; everything else is ordering.
+    if (this.isVirtualDevice(label)) return RANK.VIRTUAL;
+
+    // Specificity first: the REV1 is the controller this rig is built around,
+    // and it should win over a second Pioneer device sharing the bus.
+    if (/ddj.*rev\s*1/.test(lower)) return RANK.DJ_DDJ_REV1;
+    if (lower.includes('ddj')) return RANK.DJ_DDJ;
+    if (lower.includes('pioneer')) return RANK.DJ_PIONEER;
+    if (['serato', 'traktor', 'rekordbox', 'djm', 'cdj'].some(k => lower.includes(k))) {
+      return RANK.DJ_OTHER;
+    }
+
+    // A real microphone is a more useful accident than a silent loopback, so
+    // physical inputs stay above virtual ones even when nothing is plugged in.
+    if (this.isBuiltInDevice(label)) return RANK.BUILT_IN;
+    return RANK.PHYSICAL;
+  }
+
+  // Inputs arrive rank-sorted, so the best DJ device is simply the first one.
   findDJInput(inputs) {
-    // Look for Pioneer DDJ-REV1 first (hardware controller)
-    const ddjRev1 = inputs.find(d => /ddj.*rev1/i.test(d.label));
-    if (ddjRev1) return ddjRev1;
-    
-    // Look for any DDJ controller
-    const ddj = inputs.find(d => /ddj/i.test(d.label));
-    if (ddj) return ddj;
-    
-    // Look for Pioneer devices
-    const pioneer = inputs.find(d => /pioneer/i.test(d.label));
-    if (pioneer) return pioneer;
-    
-    return null;
+    return inputs.find(d => d.isDJ) || null;
   }
 
   // Width of one FFT bin, in Hz. Everything frequency-aware derives from this

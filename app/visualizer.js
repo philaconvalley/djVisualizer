@@ -112,6 +112,7 @@ class DJVisualizer {
     this.p5Instance = new p5((p) => {
       p.setup = () => {
         this.measureStage();
+        p.pixelDensity(this.computeDensity(p));
         const canvas = p.createCanvas(this.w, this.h, p.WEBGL);
         canvas.parent('p5-canvas');
         p.frameRate(60);
@@ -122,6 +123,7 @@ class DJVisualizer {
 
       p.windowResized = () => {
         this.measureStage();
+        p.pixelDensity(this.computeDensity(p));
         p.resizeCanvas(this.w, this.h);
         this.initializeParticles();
         this.resetCollage();
@@ -129,6 +131,20 @@ class DJVisualizer {
 
       p.draw = () => this.draw(p);
     });
+  }
+
+  // A laptop panel and a projector both report the same native density from
+  // the OS, but a projector-sized surface at that density is far more pixels
+  // than the display can resolve. Cap the backing store at a fixed pixel
+  // budget and let density fall off smoothly with area, so a laptop stays at
+  // full density and a fullscreen projector surface drops toward 1 instead
+  // of paying for detail nothing can show. See PHI-174.
+  computeDensity(p) {
+    const MAX_BACKING_PIXELS = 6_000_000;
+    if (!this.w || !this.h) return 1;
+    const native = p.displayDensity ? p.displayDensity() : 1;
+    const byBudget = Math.sqrt(MAX_BACKING_PIXELS / (this.w * this.h));
+    return Math.max(1, Math.min(native, byBudget));
   }
 
   // The band hues are tokens, and the stage is not allowed a second opinion
