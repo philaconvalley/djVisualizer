@@ -10,7 +10,9 @@
 // music) and leave the browser tab frontmost and untouched for the whole
 // sweep — see PHI-174 and CONTRIBUTING.md's "Hardware check before a show".
 // After typing the sweep command, click the page itself: focus left in
-// DevTools throttles the page, and the probe skips those frames.
+// DevTools throttles the page. The sweep waits for that click before each
+// sampling window, and skips any frames that arrive while unfocused. When the
+// sweep ends it switches back to the mode that was showing before.
 //
 // This is a classic script's global `djApp` (declared with `let` in
 // app/app.js) referenced from a module. That works because a page's global
@@ -19,8 +21,15 @@
 // the app side.
 
 const DEFAULT_WINDOW_MS = 5000;
+const DEFAULT_FOCUS_TIMEOUT_MS = 30000;
 
 let sampler = null;
+// The onFrame the app had before the probe touched it, and the wrapper the
+// probe installed. init() keeps these so a second call replaces its own
+// wrapper instead of wrapping it — a wrapper around a wrapper would run the
+// sampler twice per frame and halve every interval.
+let originalOnFrame = null;
+let probeOnFrame = null;
 
 // A frame is excluded from the FPS calculation if the tab was hidden, or the
 // window was unfocused, at any point since the previous frame. Two traps:
@@ -133,11 +142,15 @@ export async function init() {
   sampler = createSampler();
 
   // Chain onto any onFrame already wired (updateFPS), rather than replace it.
-  const previousOnFrame = djApp.visualizer.onFrame;
-  djApp.visualizer.onFrame = () => {
-    if (previousOnFrame) previousOnFrame();
+  // Only capture it if the current onFrame is not our own wrapper.
+  if (djApp.visualizer.onFrame !== probeOnFrame) {
+    originalOnFrame = djApp.visualizer.onFrame;
+  }
+  probeOnFrame = () => {
+    if (originalOnFrame) originalOnFrame();
     sampler.onFrame();
   };
+  djApp.visualizer.onFrame = probeOnFrame;
 
   return { ready: true, modes: getModeList() };
 }
@@ -152,29 +165,61 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Holds until the page has focus and is visible, or until timeoutMs passes.
+// hw.sweep() is typed into DevTools, so the page starts unfocused; without
+// this the first mode's window opens before anyone can click back, and that
+// row is always flagged "re-run". On timeout the sweep goes ahead and the
+// sampler flags the row as usual.
+async function waitForFocus(timeoutMs) {
+  if (document.hasFocus() && !document.hidden) return true;
+  console.info('[hardware-probe] Waiting for the page to have focus — click the page to start sampling.');
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    await wait(100);
+    if (document.hasFocus() && !document.hidden) return true;
+  }
+  console.warn(`[hardware-probe] Page still unfocused after ${timeoutMs} ms; sampling anyway.`);
+  return false;
+}
+
 // Sweeps every mode in dropdown order (the same order keys 1-9/0 map to),
 // holding each for windowMs and reporting p50/p05 FPS. Skips 'custom' by
 // default since it renders blank without an uploaded file and would report
 // a meaningless number — pass includeCustom: true if media is loaded.
-export async function sweep({ windowMs = DEFAULT_WINDOW_MS, includeCustom = false } = {}) {
+// Before each window it waits up to focusTimeoutMs for the page to have
+// focus. When the sweep ends, or throws, it restores the mode that was showing.
+export async function sweep({
+  windowMs = DEFAULT_WINDOW_MS,
+  includeCustom = false,
+  focusTimeoutMs = DEFAULT_FOCUS_TIMEOUT_MS,
+} = {}) {
   if (!sampler) throw new Error('Call hw.init() first.');
   const modes = getModeList().filter((m) => includeCustom || m !== 'custom');
+  const startingMode = document.getElementById('visualMode').value;
   const results = {};
 
-  for (const mode of modes) {
-    djApp.switchVisualizationMode(mode);
-    // Let the mode settle (particle re-init, collage reset) before sampling.
-    await wait(300);
-    sampler.startWindow(mode);
-    await wait(windowMs);
-    results[mode] = summarize(sampler.stopWindow());
-    if (!results[mode].clean) {
-      console.warn(
-        `[hardware-probe] ${mode}: skipped ${results[mode].skippedHidden} hidden and ` +
-          `${results[mode].skippedUnfocused} unfocused frames. Click the page and keep it ` +
-          'focused, then re-run the sweep before recording this mode.'
-      );
+  try {
+    for (const mode of modes) {
+      djApp.switchVisualizationMode(mode);
+      // Let the mode settle (particle re-init, collage reset) before sampling.
+      await wait(300);
+      await waitForFocus(focusTimeoutMs);
+      sampler.startWindow(mode);
+      await wait(windowMs);
+      results[mode] = summarize(sampler.stopWindow());
+      if (!results[mode].clean) {
+        console.warn(
+          `[hardware-probe] ${mode}: skipped ${results[mode].skippedHidden} hidden and ` +
+            `${results[mode].skippedUnfocused} unfocused frames. Click the page and keep it ` +
+            'focused, then re-run the sweep before recording this mode.'
+        );
+      }
     }
+  } finally {
+    // stopWindow() is a no-op if no window is open; it matters when a
+    // window was open at the moment of an error.
+    sampler.stopWindow();
+    djApp.switchVisualizationMode(startingMode);
   }
 
   return {
