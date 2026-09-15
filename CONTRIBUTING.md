@@ -164,7 +164,7 @@ comparison), load `test/hardware-probe.js` from the console instead and run
 `hw.init()` / `hw.sweep()`; see the file header for usage. Record results in
 `docs/hardware-checks/`.
 
-**Reading the frame-rate figures (proposed, PHI-176).** A mode passes when p05 is
+**Reading the frame-rate figures (PHI-176).** A mode passes when p05 is
 30 FPS or more *and* its slow-frame rate (frames under 30 FPS per 1000) is close
 to the light modes in the same run. Read the rate before the minimum. The
 minimum is one frame, and a background hitch can set it in any mode: on 08/10,
