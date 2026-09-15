@@ -202,12 +202,14 @@
    * regained are the compositor catching up, not the renderer's cost, and they
    * drag p05 from ~57 down to ~24 — a fake stall that reads like a real one.
    * A frame after a hidden or unfocused gap breaks the run too: its dt spans
-   * the gap, not a render.
+   * the gap, not a render. So does a frame from another mode: a mark window
+   * runs until the next mark, and a sweep switches mode inside it. (PHI-176.)
    */
-  function cleanFps(frames) {
+  function cleanFps(frames, mode) {
     const kept = []; let run = [];
     for (const f of frames) {
-      if (f.focus && !f.hiddenGap && !f.blurGap && f.dt > 0) run.push(f);
+      if (f.focus && !f.hiddenGap && !f.blurGap && f.dt > 0 &&
+          (mode == null || f.mode === mode)) run.push(f);
       else { if (run.length > 130) kept.push(...run.slice(30)); run = []; }
     }
     if (run.length > 130) kept.push(...run.slice(30));
@@ -257,20 +259,25 @@
     const out = {};
     for (const m of state.marks) {
       const frames = windowFrames(m.name);
-      const fps = cleanFps(frames);
-      const skipped = skippedIn(frames);
+      const fps = cleanFps(frames, m.mode);
+      const skipped = skippedIn(frames.filter(f => f.mode === m.mode));
       if (fps.length < 150) {                           // too little to trust
         // A swept mode still gets a row, flagged, so it cannot drop out of the
         // results without a trace (it used to, when the page started unfocused).
         if (m.name.startsWith('mode-') && !out[m.mode]) {
           out[m.mode] = { mode: m.mode, samples: fps.length, p50: null, p05: null, min: null,
+                          slowPer1000: null,
                           skippedHidden: skipped.hidden, skippedUnfocused: skipped.unfocused,
                           pass: false, clean: false };
         }
         continue;
       }
+      // Frames under 30 FPS (over 33.3 ms) per 1000. The minimum is one sample,
+      // and a background hitch sets it in any mode. The rate is what separated
+      // Polygon Collage (14.7) from the light modes (1.4-3.1) on 08/10. (PHI-176.)
+      const slowPer1000 = +(fps.filter(x => x < FPS_FLOOR).length * 1000 / fps.length).toFixed(1);
       const row = { mode: m.mode, samples: fps.length, p50: pct(fps, 50), p05: pct(fps, 5),
-                    min: +Math.min(...fps).toFixed(1),
+                    min: +Math.min(...fps).toFixed(1), slowPer1000,
                     skippedHidden: skipped.hidden, skippedUnfocused: skipped.unfocused };
       row.pass = row.p05 >= FPS_FLOOR;
       row.clean = skipped.hidden + skipped.unfocused === 0;
@@ -517,12 +524,12 @@
       const lines = [
         `Surface: ${screen.width}x${screen.height} @ ${window.devicePixelRatio}x — ${new Date().toISOString()}`,
         '',
-        '| Mode | p50 FPS | p05 FPS | Min FPS | Samples | Skipped (hidden/unfocused) |',
-        '|------|---------|---------|---------|---------|----------------------------|'
+        '| Mode | p50 FPS | p05 FPS | Min FPS | Slow /1000 | Samples | Skipped (hidden/unfocused) |',
+        '|------|---------|---------|---------|------------|---------|----------------------------|'
       ];
       for (const r of Object.values(rows)) {
         const skipped = r.clean ? '0' : `${r.skippedHidden}/${r.skippedUnfocused} — re-run`;
-        lines.push(`| ${r.mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.min ?? '—'} | ${r.samples} | ${skipped} |`);
+        lines.push(`| ${r.mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.min ?? '—'} | ${r.slowPer1000 ?? '—'} | ${r.samples} | ${skipped} |`);
       }
       const md = lines.join('\n');
       console.log(md);

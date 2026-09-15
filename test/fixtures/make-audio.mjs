@@ -100,6 +100,36 @@ function kickWithSyncopatedBass(bpm, seconds, bassAmp = 0.5) {
   return out;
 }
 
+/* Kick, mid chord stabs, and noisy hats. Every other fixture here leaves mid
+ * and high near zero, which is not what a mix does to the stage: on the
+ * DDJ-REV1 a full mix read bass ~0.6, mid ~0.5, high ~0.3. Mandala's spoke count
+ * and Polygon Collage's shape size both grow with those bands, so a stall test
+ * on a bare kick measures a lighter stage than a real set draws. PHI-176.
+ */
+function broadbandMix(bpm, seconds) {
+  const out = new Float32Array(Math.round(RATE * seconds));
+  const beat = Math.round((60 / bpm) * RATE);
+  const eighth = Math.round(beat / 2);
+  const chord = [440, 554.37, 659.25, 1318.5, 2637];
+
+  for (let i = 0; i < out.length; i++) {
+    const intoBeat = (i % beat) / RATE;
+    const intoEighth = (i % eighth) / RATE;
+    const kick = Math.sin(2 * Math.PI * 60 * intoBeat) * Math.exp(-intoBeat / 0.09) * 0.6;
+
+    // The chord moves every other bar so the mid band is not a constant.
+    const shift = Math.floor(i / (beat * 4)) % 2 ? 1.12 : 1;
+    let mid = 0;
+    for (const hz of chord) mid += Math.sin((2 * Math.PI * hz * shift * i) / RATE);
+    mid *= 0.07 * (0.55 + 0.45 * Math.exp(-intoEighth / 0.18));
+
+    const hat = (Math.random() - 0.5) * Math.exp(-intoEighth / 0.03) * 0.5 +
+      (Math.random() - 0.5) * 0.06;
+    out[i] = kick + mid + hat;
+  }
+  return out;
+}
+
 mkdirSync(HERE, { recursive: true });
 
 writeWav('tone-100hz.wav', tone(100, 6));    // squarely inside 20–250
@@ -117,3 +147,7 @@ writeWav('kick-174bpm.wav', kickPattern(174, 24));
 // The case that actually failed on hardware. 125 BPM is a 480 ms beat; the
 // bassline sits at 360 ms, and the old estimator reported the bassline.
 writeWav('kick-125bpm-bassline.wav', kickWithSyncopatedBass(125, 24));
+
+// Stage-load fixture for test/stall-trace.mjs. Sixty seconds, so a long dwell
+// does not loop mid-window.
+writeWav('broadband-124bpm.wav', broadbandMix(124, 60));
