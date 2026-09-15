@@ -149,7 +149,9 @@ thing to look at, because "it looked fine" is not a check.
    the failure this replaced only appeared on real music (PHI-175).
 7. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
    stall, and the FPS readout should stay usable. Spectrum and Particles are the
-   documented safe modes on a slower machine.
+   documented safe modes on a slower machine. Run the check with the software you
+   use at the show open, Serato included, and on the display you use at the show.
+   The 08/10 stalls did not reproduce on the same laptop without them (PHI-176).
 8. **Go fullscreen and check the projector, not the laptop.** Confirm the console
    rail is legible from the back of the room and that nothing important sits
    underneath it.
@@ -161,6 +163,15 @@ number worth citing (a p50/p05 FPS figure in a ticket, a before/after
 comparison), load `test/hardware-probe.js` from the console instead and run
 `hw.init()` / `hw.sweep()`; see the file header for usage. Record results in
 `docs/hardware-checks/`.
+
+**Reading the frame-rate figures (proposed, PHI-176).** A mode passes when p05 is
+30 FPS or more *and* its slow-frame rate (frames under 30 FPS per 1000) is close
+to the light modes in the same run. Read the rate before the minimum. The
+minimum is one frame, and a background hitch can set it in any mode: on 08/10,
+Mandala's 15.1 FPS minimum was one frame at the same rate as Particles. The rate
+is what showed Polygon Collage at 14.7 per 1000 against 1.4–3.1 for the light
+modes. To find what a slow frame was doing, run `node test/stall-trace.mjs`; see
+its header.
 
 ## Adding a visualization mode
 
