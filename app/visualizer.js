@@ -788,9 +788,9 @@ class DJVisualizer {
     const STREAMS = 3;
     const STEPS = 48;
     const paths = {
-      bass: { from: this.vh * 0.22, to: -this.vh * 0.22, reverse: false, rate: 1.6, sway: 0.42 },
-      mid: { from: 0, to: 0, reverse: false, rate: 2.2, sway: 0.5 },
-      high: { from: -this.vh * 0.22, to: this.vh * 0.22, reverse: true, rate: 3.0, sway: 0.34 }
+      bass: { from: this.vh * 0.22, to: -this.vh * 0.22, reverse: false, sway: 0.42 },
+      mid: { from: 0, to: 0, reverse: false, sway: 0.5 },
+      high: { from: -this.vh * 0.22, to: this.vh * 0.22, reverse: true, sway: 0.34 }
     };
 
     for (let stream = 0; stream < STREAMS; stream++) {
@@ -799,6 +799,8 @@ class DJVisualizer {
       for (const name of bands) {
         const lit = levels[name];
         const path = paths[name];
+        // One full sway per beat, on the beat clock. A whole cycle per beat
+        // means no visible jump when phase wraps from 1 back to 0.
         const drift = this.phase * Math.PI * 2 + offset;
 
         this.emissiveStroke(p, this.colors[name], 60 + lit * 165, 1.3 + lit * 2.2, () => {
@@ -806,17 +808,11 @@ class DJVisualizer {
           for (let i = 0; i <= STEPS; i++) {
             const t = i / STEPS;
             const along = path.reverse ? 1 - t : t;
-            const x =
-              (along - 0.5) * this.vw +
-              Math.sin(this.time * path.rate + offset + t * 5) * lit * this.vw * 0.05;
+            const x = (along - 0.5) * this.vw + Math.sin(drift + t * 5) * lit * this.vw * 0.05;
             const y =
               path.from +
               (path.to - path.from) * t +
-              Math.cos(this.time * path.rate * 0.7 + offset + t * 4) *
-                lit *
-                this.vh *
-                path.sway *
-                0.2;
+              Math.cos(drift + t * 4) * lit * this.vh * path.sway * 0.2;
             p.vertex(x, y);
           }
           p.endShape();
