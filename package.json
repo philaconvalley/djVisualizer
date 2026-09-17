@@ -9,9 +9,12 @@
     "start": "python3 -m http.server 8000",
     "fixtures": "node test/fixtures/make-audio.mjs",
     "verify": "node test/fixtures/make-audio.mjs && node test/verify-audio.mjs",
-    "smoke": "node test/smoke-deploy.mjs"
+    "smoke": "node test/smoke-deploy.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "playwright": "^1.62.0"
+    "playwright": "^1.62.0",
+    "prettier": "3.9.7"
   }
 }

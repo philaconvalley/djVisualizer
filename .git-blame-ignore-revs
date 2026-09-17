@@ -1,0 +1,10 @@
+# Commits that git blame should skip: bulk changes that touched many lines
+# without changing what they do. GitHub's blame view reads this file
+# automatically. For local blame, run once:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# These hashes must exist on main. Merge any PR that adds one with a merge
+# commit. A squash or rebase merge rewrites the commit and orphans the hash.
+
+# style: Reformat the codebase with Prettier (PHI-170)
+89787327215542a7394f0cde58a91024fed2b815

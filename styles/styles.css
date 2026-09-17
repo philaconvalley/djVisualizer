@@ -7,16 +7,16 @@
   /* Alpha is set by the worst case, not the best: a bright Galaxy frame passing
      under the rail must not lift the backdrop enough to break label contrast. */
   --material: rgba(28, 28, 30, 0.86);
-  --material-solid: #1C1C1E;
+  --material-solid: #1c1c1e;
   --material-edge: rgba(255, 255, 255, 0.14);
 
   /* Band identity. Mapping is fixed by the product; hues are tokens. */
-  --bass: #FF453A;
-  --mid: #30D158;
-  --high: #0A84FF;
+  --bass: #ff453a;
+  --mid: #30d158;
+  --high: #0a84ff;
 
   /* Vibrancy-tuned label colors. Tinted from the foreground, never flat gray. */
-  --label: #FFFFFF;
+  --label: #ffffff;
   --label-2: rgba(235, 235, 245, 0.8);
   --label-3: rgba(235, 235, 245, 0.58);
 
@@ -32,9 +32,12 @@
   --overlay: 200ms;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -43,7 +46,10 @@ html, body {
 body {
   background: var(--stage);
   color: var(--label);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 15px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
@@ -51,14 +57,22 @@ body {
 }
 
 /* Browser surfaces the design still owns. */
-::selection { background: var(--high); color: #fff; }
+::selection {
+  background: var(--high);
+  color: #fff;
+}
 :focus-visible {
   outline: 2px solid var(--high);
   outline-offset: 3px;
   border-radius: 6px;
 }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background: var(--track);
   border-radius: 999px;
@@ -91,7 +105,9 @@ body {
   display: block;
 }
 
-#collage-canvas[hidden] { display: none; }
+#collage-canvas[hidden] {
+  display: none;
+}
 
 #p5-canvas {
   position: absolute;
@@ -99,7 +115,9 @@ body {
   z-index: 2;
 }
 
-#p5-canvas canvas { display: block; }
+#p5-canvas canvas {
+  display: block;
+}
 
 .stage-hint {
   position: absolute;
@@ -122,7 +140,9 @@ body {
   color: var(--label-3);
 }
 
-body[data-running="true"] .stage-hint { opacity: 0; }
+body[data-running='true'] .stage-hint {
+  opacity: 0;
+}
 
 /* ---------- Console ---------- */
 
@@ -141,14 +161,16 @@ body[data-running="true"] .stage-hint { opacity: 0; }
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
   /* Light catching the top edge of a real material. Elevation declared once. */
-  box-shadow: inset 0 1px 0 0 var(--material-edge), 0 -12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 0 var(--material-edge),
+    0 -12px 40px rgba(0, 0, 0, 0.5);
 }
 
 /* Opaque scrim beneath the translucent rail so the composite floor is fixed
    whatever the canvas is doing behind it. Without it, label contrast tracks
    the brightness of the visualisation. */
 .console::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
@@ -171,14 +193,18 @@ body[data-running="true"] .stage-hint { opacity: 0; }
   gap: 14px;
 }
 
-.console-group--output { margin-left: auto; }
+.console-group--output {
+  margin-left: auto;
+}
 
 .console-group--media {
   flex-basis: 100%;
   gap: 12px;
 }
 
-.console-group--media[hidden] { display: none; }
+.console-group--media[hidden] {
+  display: none;
+}
 
 /* ---------- Error banner ---------- */
 
@@ -199,11 +225,14 @@ body[data-running="true"] .stage-hint { opacity: 0; }
      .is-open is added a frame after [hidden] is cleared. */
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity var(--overlay) var(--ease-out),
-              transform var(--overlay) var(--ease-out);
+  transition:
+    opacity var(--overlay) var(--ease-out),
+    transform var(--overlay) var(--ease-out);
 }
 
-.error-banner[hidden] { display: none; }
+.error-banner[hidden] {
+  display: none;
+}
 
 .error-banner.is-open {
   opacity: 1;
@@ -241,11 +270,15 @@ body[data-running="true"] .stage-hint { opacity: 0; }
   font-weight: 590;
   letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background-color var(--press) ease, transform var(--press) var(--ease-out);
+  transition:
+    background-color var(--press) ease,
+    transform var(--press) var(--ease-out);
 }
 
 /* Feedback on press, not on release. */
-.transport:active { transform: scale(0.97); }
+.transport:active {
+  transform: scale(0.97);
+}
 
 .transport-dot {
   width: 10px;
@@ -255,10 +288,17 @@ body[data-running="true"] .stage-hint { opacity: 0; }
   transition: background-color var(--press) ease;
 }
 
-body[data-running="true"] .transport { background: rgba(255, 69, 58, 0.22); }
-body[data-running="true"] .transport-dot { background: var(--bass); }
+body[data-running='true'] .transport {
+  background: rgba(255, 69, 58, 0.22);
+}
+body[data-running='true'] .transport-dot {
+  background: var(--bass);
+}
 
-.transport:disabled { opacity: 0.5; cursor: default; }
+.transport:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* ---------- Fields ---------- */
 
@@ -291,16 +331,28 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   font-size: 14px;
   cursor: pointer;
   transition: background-color var(--press) ease;
-  background-image: linear-gradient(45deg, transparent 50%, var(--label-2) 50%),
-                    linear-gradient(135deg, var(--label-2) 50%, transparent 50%);
-  background-position: right 14px center, right 9px center;
-  background-size: 5px 5px, 5px 5px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--label-2) 50%),
+    linear-gradient(135deg, var(--label-2) 50%, transparent 50%);
+  background-position:
+    right 14px center,
+    right 9px center;
+  background-size:
+    5px 5px,
+    5px 5px;
   background-repeat: no-repeat;
 }
 
-.field-control option { background: var(--material-solid); color: var(--label); }
+.field-control option {
+  background: var(--material-solid);
+  color: var(--label);
+}
 
-.field-file { color: var(--label-2); font-size: 13px; max-width: 260px; }
+.field-file {
+  color: var(--label-2);
+  font-size: 13px;
+  max-width: 260px;
+}
 
 .field-file::file-selector-button {
   margin-right: 10px;
@@ -316,7 +368,10 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   transition: background-color var(--press) ease;
 }
 
-.custom-media-status { font-size: 13px; color: var(--label-3); }
+.custom-media-status {
+  font-size: 13px;
+  color: var(--label-3);
+}
 
 /* ---------- The three-band instrument ----------
    Level and gain are one object. The fill is the post-gain level — room times
@@ -346,9 +401,15 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   border-radius: 8px;
 }
 
-.band[data-band="bass"] .band-fill { background: var(--bass); }
-.band[data-band="mid"]  .band-fill { background: var(--mid); }
-.band[data-band="high"] .band-fill { background: var(--high); }
+.band[data-band='bass'] .band-fill {
+  background: var(--bass);
+}
+.band[data-band='mid'] .band-fill {
+  background: var(--mid);
+}
+.band[data-band='high'] .band-fill {
+  background: var(--high);
+}
 
 .band-input {
   position: absolute;
@@ -384,21 +445,35 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   cursor: ew-resize;
 }
 
-.band-input::-moz-range-track { background: transparent; }
+.band-input::-moz-range-track {
+  background: transparent;
+}
 
 /* Grab feedback only. The fill itself is a meter and never animates —
    a transition there would put latency between the sound and the reading. */
-.band-track { transition: background-color var(--press) ease; }
-.band:has(.band-input:active) .band-track { background: rgba(120, 120, 128, 0.3); }
+.band-track {
+  transition: background-color var(--press) ease;
+}
+.band:has(.band-input:active) .band-track {
+  background: rgba(120, 120, 128, 0.3);
+}
 
 /* Pointer affordance. Gated because touch fires a false hover on tap. */
 @media (hover: hover) and (pointer: fine) {
   .transport:hover,
   .ghost:hover,
-  .field-control:hover { background-color: rgba(120, 120, 128, 0.36); }
-  body[data-running="true"] .transport:hover { background-color: rgba(255, 69, 58, 0.32); }
-  .band:hover .band-track { background-color: rgba(120, 120, 128, 0.26); }
-  .field-file::file-selector-button:hover { background-color: rgba(120, 120, 128, 0.36); }
+  .field-control:hover {
+    background-color: rgba(120, 120, 128, 0.36);
+  }
+  body[data-running='true'] .transport:hover {
+    background-color: rgba(255, 69, 58, 0.32);
+  }
+  .band:hover .band-track {
+    background-color: rgba(120, 120, 128, 0.26);
+  }
+  .field-file::file-selector-button:hover {
+    background-color: rgba(120, 120, 128, 0.36);
+  }
 }
 
 .band-meta {
@@ -417,7 +492,9 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
 
 /* Exact Hz is reference, not performance information. The name teaches; the
    numbers live in the help panel where they can be read without crowding. */
-.band-range { display: none; }
+.band-range {
+  display: none;
+}
 
 .band-value {
   margin-left: auto;
@@ -480,7 +557,7 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
 /* The glow is a pseudo-element whose opacity animates, not a transitioned
    box-shadow. Shadow is a paint property; opacity composites on the GPU. */
 .beat-indicator::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: -5px;
   border-radius: 50%;
@@ -510,10 +587,14 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   font-size: 13px;
   font-weight: 590;
   cursor: pointer;
-  transition: background-color var(--press) ease, transform var(--press) var(--ease-out);
+  transition:
+    background-color var(--press) ease,
+    transform var(--press) var(--ease-out);
 }
 
-.ghost:active { transform: scale(0.97); }
+.ghost:active {
+  transform: scale(0.97);
+}
 
 /* ---------- Help ---------- */
 
@@ -532,14 +613,17 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   /* Not anchored to a trigger, so it stays centred rather than scaling from one. */
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--overlay) var(--ease-out),
-              visibility 0s linear var(--overlay);
+  transition:
+    opacity var(--overlay) var(--ease-out),
+    visibility 0s linear var(--overlay);
 }
 
 .help-overlay.is-open {
   opacity: 1;
   visibility: visible;
-  transition: opacity var(--overlay) var(--ease-out), visibility 0s;
+  transition:
+    opacity var(--overlay) var(--ease-out),
+    visibility 0s;
 }
 
 .help-content {
@@ -551,10 +635,14 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   padding: 30px 32px;
   border-radius: var(--radius-module);
   background: var(--material-solid);
-  box-shadow: inset 0 1px 0 0 var(--material-edge), 0 24px 70px rgba(0, 0, 0, 0.6);
+  box-shadow:
+    inset 0 1px 0 0 var(--material-edge),
+    0 24px 70px rgba(0, 0, 0, 0.6);
 }
 
-.help-overlay.is-open .help-content { transform: scale(1); }
+.help-overlay.is-open .help-content {
+  transform: scale(1);
+}
 
 .help-head {
   display: flex;
@@ -579,10 +667,26 @@ body[data-running="true"] .transport-dot { background: var(--bass); }
   color: var(--label-3);
 }
 
-.help-keys { margin: 0; display: flex; flex-direction: column; gap: 9px; }
-.help-keys > div { display: flex; align-items: baseline; gap: 14px; }
-.help-keys dt { min-width: 96px; margin: 0; }
-.help-keys dd { margin: 0; color: var(--label-2); font-size: 14px; }
+.help-keys {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.help-keys > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.help-keys dt {
+  min-width: 96px;
+  margin: 0;
+}
+.help-keys dd {
+  margin: 0;
+  color: var(--label-2);
+  font-size: 14px;
+}
 
 .help-notes {
   margin: 0;
@@ -633,47 +737,87 @@ kbd {
 /* ---------- Accessibility preferences ---------- */
 
 @media (prefers-reduced-transparency: reduce) {
-  .console, .help-overlay, .help-content {
+  .console,
+  .help-overlay,
+  .help-content {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .console { background: var(--material-solid); }
-  .help-overlay { background: rgba(0, 0, 0, 0.94); }
+  .console {
+    background: var(--material-solid);
+  }
+  .help-overlay {
+    background: rgba(0, 0, 0, 0.94);
+  }
 }
 
 @media (prefers-contrast: more) {
-  :root { --label-2: #FFFFFF; --label-3: rgba(235, 235, 245, 0.8); }
-  .console { background: #000; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5); }
-  .transport, .ghost, .field-control { background: rgba(120, 120, 128, 0.45); }
+  :root {
+    --label-2: #ffffff;
+    --label-3: rgba(235, 235, 245, 0.8);
+  }
+  .console {
+    background: #000;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
+  }
+  .transport,
+  .ghost,
+  .field-control {
+    background: rgba(120, 120, 128, 0.45);
+  }
 }
 
 /* Fewer and gentler, not zero. Colour and opacity still carry meaning here;
    only positional and scale change is removed. */
 @media (prefers-reduced-motion: reduce) {
   .transport:active,
-  .ghost:active { transform: none; }
+  .ghost:active {
+    transform: none;
+  }
   .help-content,
-  .help-overlay.is-open .help-content { transform: none; transition: none; }
+  .help-overlay.is-open .help-content {
+    transform: none;
+    transition: none;
+  }
   /* The canvas flash is damped through flashIntensity; the rail's glow pulse
      must agree with it under the same preference. The dot still changes colour,
      because colour is not movement. */
   .beat-indicator::after,
-  .beat-indicator.flash::after { opacity: 0; }
+  .beat-indicator.flash::after {
+    opacity: 0;
+  }
   /* Reduced motion here means reduced flashing, not stillness (see the
      Accessibility section of DESIGN.md) — the fade stays, the slide drops. */
   .error-banner,
-  .error-banner.is-open { transform: none; }
+  .error-banner.is-open {
+    transform: none;
+  }
 }
 
 /* Desktop-first by design: this needs a hardware audio input and a large display.
    Narrow widths stay usable rather than pretty; nothing may overflow the viewport. */
 @media (max-width: 860px) {
-  .console { gap: 14px 18px; padding: 14px; }
-  .console-group { flex-wrap: wrap; }
-  .console-group--output { margin-left: 0; width: 100%; justify-content: space-between; }
-  .console-group--bands { flex-basis: 100%; }
-  .readout-status { max-width: none; }
-  .field-control { max-width: 100%; }
+  .console {
+    gap: 14px 18px;
+    padding: 14px;
+  }
+  .console-group {
+    flex-wrap: wrap;
+  }
+  .console-group--output {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .console-group--bands {
+    flex-basis: 100%;
+  }
+  .readout-status {
+    max-width: none;
+  }
+  .field-control {
+    max-width: 100%;
+  }
   /* The range label is the least load-bearing text here and it wraps,
      stranding the value mid-line. Name plus value is the whole reading. */
 }

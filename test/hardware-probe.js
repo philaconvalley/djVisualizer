@@ -46,27 +46,35 @@
  * assertion the tone tests make, run against the real signal chain.
  */
 (() => {
-  if (window.hw) { console.warn('[hw] probe already installed'); return; }
+  if (window.hw) {
+    console.warn('[hw] probe already installed');
+    return;
+  }
   if (typeof djApp === 'undefined') {
     console.error('[hw] djApp not found — load the app and press Start, then re-inject.');
     return;
   }
 
-  const BAND_RATIO = 2.5;   // test/verify-audio.mjs:124
-  const BAND_FLOOR = 0.05;  // test/verify-audio.mjs:123
-  const FPS_FLOOR  = 30;    // p05, not mean: a stall is a tail event
-  const STORE_KEY  = 'hw.hardware-check';
+  const BAND_RATIO = 2.5; // test/verify-audio.mjs:124
+  const BAND_FLOOR = 0.05; // test/verify-audio.mjs:123
+  const FPS_FLOOR = 30; // p05, not mean: a stall is a tail event
+  const STORE_KEY = 'hw.hardware-check';
 
   const t0 = performance.now();
   const now = () => Math.round(performance.now() - t0);
 
   const state = {
     startedAt: new Date().toISOString(),
-    env: null, marks: [], bands: [], bpm: [], frames: [], errors: []
+    env: null,
+    marks: [],
+    bands: [],
+    bpm: [],
+    frames: [],
+    errors: []
   };
   let currentMark = 'unmarked';
 
-  const ap  = () => djApp.audioProcessor;
+  const ap = () => djApp.audioProcessor;
   const vis = () => djApp.visualizer;
   const mode = () => vis()?.currentMode ?? null;
 
@@ -81,12 +89,17 @@
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({ ...state, frames: [] }));
         console.warn('[hw] storage full; persisted without raw frames');
-      } catch (_) { console.error('[hw] could not persist:', e.message); }
+      } catch (_) {
+        console.error('[hw] could not persist:', e.message);
+      }
     }
   }
   const schedulePersist = () => {
     if (saveTimer) return;
-    saveTimer = setTimeout(() => { saveTimer = null; persist(); }, 2000);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      persist();
+    }, 2000);
   };
   window.addEventListener('beforeunload', persist);
 
@@ -98,14 +111,20 @@
       // Raw labels, BEFORE the app's cleanup regexes strip "Default - " and
       // rewrite built-in suffixes. Widening isDJDevice() needs the real string.
       raw = (await navigator.mediaDevices.enumerateDevices())
-        .filter(d => d.kind === 'audioinput')
-        .map(d => ({ deviceId: d.deviceId, label: d.label, groupId: d.groupId }));
+        .filter((d) => d.kind === 'audioinput')
+        .map((d) => ({ deviceId: d.deviceId, label: d.label, groupId: d.groupId }));
     } catch (e) {
-      state.errors.push({ at: now(), mark: currentMark, message: `enumerateDevices: ${e.message}` });
+      state.errors.push({
+        at: now(),
+        mark: currentMark,
+        message: `enumerateDevices: ${e.message}`
+      });
     }
 
     let processed = [];
-    try { processed = await ap().listInputs(); } catch (e) {
+    try {
+      processed = await ap().listInputs();
+    } catch (e) {
       state.errors.push({ at: now(), mark: currentMark, message: `listInputs: ${e.message}` });
     }
 
@@ -123,11 +142,14 @@
       audioRunning: !!ap()?.isRunning,
       rawInputs: raw,
       processedInputs: processed.map((d, i) => ({
-        position: i, label: d.label, isDJ: d.isDJ, isBuiltIn: d.isBuiltIn
+        position: i,
+        label: d.label,
+        isDJ: d.isDJ,
+        isBuiltIn: d.isBuiltIn
       })),
-      selectedOptionText: document.getElementById('audioInputSelect')
-        ?.selectedOptions?.[0]?.textContent ?? null,
-      modeOptions: modeSelect ? [...modeSelect.options].map(o => o.value) : [],
+      selectedOptionText:
+        document.getElementById('audioInputSelect')?.selectedOptions?.[0]?.textContent ?? null,
+      modeOptions: modeSelect ? [...modeSelect.options].map((o) => o.value) : [],
       display: {
         screen: [screen.width, screen.height],
         viewport: [window.innerWidth, window.innerHeight],
@@ -142,12 +164,21 @@
   // ---- samplers ---------------------------------------------------------
 
   const bandTimer = setInterval(() => {
-    const a = ap(); if (!a) return;
-    state.bands.push({ at: now(), mark: currentMark, bass: a.bass, mid: a.mid, high: a.high, rms: a.rms });
+    const a = ap();
+    if (!a) return;
+    state.bands.push({
+      at: now(),
+      mark: currentMark,
+      bass: a.bass,
+      mid: a.mid,
+      high: a.high,
+      rms: a.rms
+    });
   }, 100);
 
   const bpmTimer = setInterval(() => {
-    const a = ap(); if (!a) return;
+    const a = ap();
+    if (!a) return;
     state.bpm.push({ at: now(), mark: currentMark, bpm: a.bpm, mode: mode() });
   }, 250);
 
@@ -164,16 +195,24 @@
   let lastFrame = performance.now();
   let hiddenSince = document.hidden;
   let blurredSince = !document.hasFocus();
-  const onVisibility = () => { if (document.hidden) hiddenSince = true; };
-  const onBlur = () => { blurredSince = true; };
+  const onVisibility = () => {
+    if (document.hidden) hiddenSince = true;
+  };
+  const onBlur = () => {
+    blurredSince = true;
+  };
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('blur', onBlur);
   vis().onFrame = function (...args) {
     const t = performance.now();
     state.frames.push({
-      at: now(), mode: mode(), dt: t - lastFrame,
-      focus: document.hasFocus(), vis: document.visibilityState,
-      hiddenGap: hiddenSince, blurGap: blurredSince
+      at: now(),
+      mode: mode(),
+      dt: t - lastFrame,
+      focus: document.hasFocus(),
+      vis: document.visibilityState,
+      hiddenGap: hiddenSince,
+      blurGap: blurredSince
     });
     lastFrame = t;
     hiddenSince = document.hidden;
@@ -182,7 +221,11 @@
   };
 
   const onError = (e) => {
-    state.errors.push({ at: now(), mark: currentMark, message: e.message || String(e.reason || e) });
+    state.errors.push({
+      at: now(),
+      mark: currentMark,
+      message: e.message || String(e.reason || e)
+    });
     schedulePersist();
   };
   window.addEventListener('error', onError);
@@ -190,7 +233,7 @@
 
   // ---- statistics -------------------------------------------------------
 
-  const mean = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
   const pct = (xs, p) => {
     if (!xs.length) return null;
     const s = [...xs].sort((a, b) => a - b);
@@ -206,38 +249,44 @@
    * runs until the next mark, and a sweep switches mode inside it. (PHI-176.)
    */
   function cleanFps(frames, mode) {
-    const kept = []; let run = [];
+    const kept = [];
+    let run = [];
     for (const f of frames) {
-      if (f.focus && !f.hiddenGap && !f.blurGap && f.dt > 0 &&
-          (mode == null || f.mode === mode)) run.push(f);
-      else { if (run.length > 130) kept.push(...run.slice(30)); run = []; }
+      if (f.focus && !f.hiddenGap && !f.blurGap && f.dt > 0 && (mode == null || f.mode === mode))
+        run.push(f);
+      else {
+        if (run.length > 130) kept.push(...run.slice(30));
+        run = [];
+      }
     }
     if (run.length > 130) kept.push(...run.slice(30));
-    return kept.map(f => 1000 / f.dt);
+    return kept.map((f) => 1000 / f.dt);
   }
 
   function windowFrames(markName) {
-    const i = state.marks.findIndex(m => m.name === markName);
+    const i = state.marks.findIndex((m) => m.name === markName);
     if (i < 0) return [];
     const from = state.marks[i].at;
     const to = state.marks[i + 1]?.at ?? Infinity;
-    return state.frames.filter(f => f.at >= from && f.at < to);
+    return state.frames.filter((f) => f.at >= from && f.at < to);
   }
 
   /** Band dominance within a mark window, on verify-audio.mjs's threshold. */
   function bandVerdict(markName, expected) {
-    const rows = state.bands.filter(r => r.mark === markName);
+    const rows = state.bands.filter((r) => r.mark === markName);
     if (!rows.length) return { mark: markName, error: 'no samples for this mark' };
     const m = {
-      bass: mean(rows.map(r => r.bass)),
-      mid: mean(rows.map(r => r.mid)),
-      high: mean(rows.map(r => r.high))
+      bass: mean(rows.map((r) => r.bass)),
+      mid: mean(rows.map((r) => r.mid)),
+      high: mean(rows.map((r) => r.high))
     };
-    const others = ['bass', 'mid', 'high'].filter(b => b !== expected);
+    const others = ['bass', 'mid', 'high'].filter((b) => b !== expected);
     const top = m[expected];
-    const next = Math.max(...others.map(b => m[b]));
+    const next = Math.max(...others.map((b) => m[b]));
     return {
-      mark: markName, expected, samples: rows.length,
+      mark: markName,
+      expected,
+      samples: rows.length,
       means: Object.fromEntries(Object.entries(m).map(([k, v]) => [k, +v.toFixed(3)])),
       ratio: +(next > 0 ? top / next : Infinity).toFixed(2),
       registers: top > BAND_FLOOR,
@@ -251,7 +300,7 @@
     const hidden = (f) => f.vis === 'hidden' || f.hiddenGap;
     return {
       hidden: frames.filter(hidden).length,
-      unfocused: frames.filter(f => !hidden(f) && (!f.focus || f.blurGap)).length
+      unfocused: frames.filter((f) => !hidden(f) && (!f.focus || f.blurGap)).length
     };
   }
 
@@ -260,25 +309,43 @@
     for (const m of state.marks) {
       const frames = windowFrames(m.name);
       const fps = cleanFps(frames, m.mode);
-      const skipped = skippedIn(frames.filter(f => f.mode === m.mode));
-      if (fps.length < 150) {                           // too little to trust
+      const skipped = skippedIn(frames.filter((f) => f.mode === m.mode));
+      if (fps.length < 150) {
+        // too little to trust
         // A swept mode still gets a row, flagged, so it cannot drop out of the
         // results without a trace (it used to, when the page started unfocused).
         if (m.name.startsWith('mode-') && !out[m.mode]) {
-          out[m.mode] = { mode: m.mode, samples: fps.length, p50: null, p05: null, min: null,
-                          slowPer1000: null,
-                          skippedHidden: skipped.hidden, skippedUnfocused: skipped.unfocused,
-                          pass: false, clean: false };
+          out[m.mode] = {
+            mode: m.mode,
+            samples: fps.length,
+            p50: null,
+            p05: null,
+            min: null,
+            slowPer1000: null,
+            skippedHidden: skipped.hidden,
+            skippedUnfocused: skipped.unfocused,
+            pass: false,
+            clean: false
+          };
         }
         continue;
       }
       // Frames under 30 FPS (over 33.3 ms) per 1000. The minimum is one sample,
       // and a background hitch sets it in any mode. The rate is what separated
       // Polygon Collage (14.7) from the light modes (1.4-3.1) on 08/10. (PHI-176.)
-      const slowPer1000 = +(fps.filter(x => x < FPS_FLOOR).length * 1000 / fps.length).toFixed(1);
-      const row = { mode: m.mode, samples: fps.length, p50: pct(fps, 50), p05: pct(fps, 5),
-                    min: +Math.min(...fps).toFixed(1), slowPer1000,
-                    skippedHidden: skipped.hidden, skippedUnfocused: skipped.unfocused };
+      const slowPer1000 = +((fps.filter((x) => x < FPS_FLOOR).length * 1000) / fps.length).toFixed(
+        1
+      );
+      const row = {
+        mode: m.mode,
+        samples: fps.length,
+        p50: pct(fps, 50),
+        p05: pct(fps, 5),
+        min: +Math.min(...fps).toFixed(1),
+        slowPer1000,
+        skippedHidden: skipped.hidden,
+        skippedUnfocused: skipped.unfocused
+      };
       row.pass = row.p05 >= FPS_FLOOR;
       row.clean = skipped.hidden + skipped.unfocused === 0;
       const prior = out[m.mode];
@@ -288,18 +355,34 @@
   }
 
   function bpmSummary() {
-    const live = state.bpm.filter(r => r.bpm > 0);
+    const live = state.bpm.filter((r) => r.bpm > 0);
     const byMode = {};
     for (const r of live) (byMode[r.mode] ||= []).push(r.bpm);
     return {
       samples: live.length,
       firstNonZeroAt: live[0]?.at ?? null,
-      median: pct(live.map(r => r.bpm), 50),
-      p05: pct(live.map(r => r.bpm), 5),
-      p95: pct(live.map(r => r.bpm), 95),
-      byMode: Object.fromEntries(Object.entries(byMode).map(([k, v]) => [k, {
-        samples: v.length, median: pct(v, 50), spread: +(Math.max(...v) - Math.min(...v)).toFixed(1)
-      }]))
+      median: pct(
+        live.map((r) => r.bpm),
+        50
+      ),
+      p05: pct(
+        live.map((r) => r.bpm),
+        5
+      ),
+      p95: pct(
+        live.map((r) => r.bpm),
+        95
+      ),
+      byMode: Object.fromEntries(
+        Object.entries(byMode).map(([k, v]) => [
+          k,
+          {
+            samples: v.length,
+            median: pct(v, 50),
+            spread: +(Math.max(...v) - Math.min(...v)).toFixed(1)
+          }
+        ])
+      )
     };
   }
 
@@ -309,7 +392,8 @@
     document.getElementById('hwCue')?.remove();
     const cue = document.createElement('div');
     cue.id = 'hwCue';
-    cue.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;' +
+    cue.style.cssText =
+      'position:fixed;inset:0;display:flex;flex-direction:column;' +
       'align-items:center;justify-content:center;z-index:99999;background:rgba(0,0,0,.35);' +
       'font:700 clamp(30px,7vw,96px)/1.15 system-ui,sans-serif;color:#fff;' +
       'text-shadow:0 2px 24px #000,0 0 8px #000;text-align:center;gap:.35em';
@@ -317,7 +401,8 @@
     const sub = document.createElement('div');
     const live = document.createElement('div');
     sub.style.cssText = 'font-size:.38em;opacity:.9;font-weight:500';
-    live.style.cssText = 'font-size:.3em;opacity:.8;font-weight:500;font-variant-numeric:tabular-nums';
+    live.style.cssText =
+      'font-size:.3em;opacity:.8;font-weight:500;font-variant-numeric:tabular-nums';
     cue.append(line, sub, live);
     document.body.appendChild(cue);
 
@@ -327,35 +412,43 @@
     }, 100);
 
     return {
-      show: (a, b) => { line.textContent = a; sub.textContent = b ?? ''; },
+      show: (a, b) => {
+        line.textContent = a;
+        sub.textContent = b ?? '';
+      },
       // SPACE is the app's transport (CONTRIBUTING.md:43). preventDefault is not
       // enough: the app listens in the bubble phase, so the press would still
       // stop the audio mid-measurement. Capture and stop it dead.
-      wait: (label, subtext) => new Promise(res => {
-        line.textContent = label; sub.textContent = subtext;
-        const go = (e) => {
-          if (e.type === 'keydown') {
-            if (e.code !== 'Space') return;
-            e.preventDefault(); e.stopImmediatePropagation();
-          }
-          document.removeEventListener('keydown', go, true);
-          cue.removeEventListener('click', go, true);
-          res();
-        };
-        document.addEventListener('keydown', go, true);
-        cue.addEventListener('click', go, true);
-      }),
+      wait: (label, subtext) =>
+        new Promise((res) => {
+          line.textContent = label;
+          sub.textContent = subtext;
+          const go = (e) => {
+            if (e.type === 'keydown') {
+              if (e.code !== 'Space') return;
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+            document.removeEventListener('keydown', go, true);
+            cue.removeEventListener('click', go, true);
+            res();
+          };
+          document.addEventListener('keydown', go, true);
+          cue.addEventListener('click', go, true);
+        }),
       hold: async (label, markName, secs) => {
         hwApi.mark(markName);
         for (let i = secs; i > 0; i--) {
-          line.textContent = label; sub.textContent = i;
-          await new Promise(r => setTimeout(r, 1000));
+          line.textContent = label;
+          sub.textContent = i;
+          await new Promise((r) => setTimeout(r, 1000));
         }
       },
       done: async (msg, subtext, ms = 5000) => {
-        line.textContent = msg; sub.textContent = subtext ?? '';
+        line.textContent = msg;
+        sub.textContent = subtext ?? '';
         clearInterval(meter);
-        await new Promise(r => setTimeout(r, ms));
+        await new Promise((r) => setTimeout(r, ms));
         cue.remove();
       }
     };
@@ -373,12 +466,12 @@
     console.info('[hw] waiting for the page to have focus — click the page to start sampling');
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
       if (ready()) {
         // Focus can land in the same tick as this check, before any frame is
         // drawn. Let a few frames pass so the one that spans the unfocused
         // stretch falls before the window opens, not inside it.
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 300));
         return true;
       }
     }
@@ -387,12 +480,18 @@
   }
 
   const hwApi = {
-    async init() { const e = await captureEnv(); console.table(e.processedInputs); return e; },
+    async init() {
+      const e = await captureEnv();
+      console.table(e.processedInputs);
+      return e;
+    },
 
     mark(name) {
       currentMark = name;
       const m = {
-        name, at: now(), mode: mode(),
+        name,
+        at: now(),
+        mode: mode(),
         reduceFlash: !!document.getElementById('reduceFlash')?.checked,
         fullscreen: !!document.fullscreenElement,
         focus: document.hasFocus()
@@ -413,8 +512,11 @@
      * sweep({ dwellMs, includeCustom, focusTimeoutMs }).
      */
     async sweep(opts = {}) {
-      const { dwellMs = 9000, includeCustom = false, focusTimeoutMs = 30000 } =
-        typeof opts === 'number' ? { dwellMs: opts } : opts;
+      const {
+        dwellMs = 9000,
+        includeCustom = false,
+        focusTimeoutMs = 30000
+      } = typeof opts === 'number' ? { dwellMs: opts } : opts;
       // Keys 1-9 then 0 map to dropdown order.
       const options = [...document.getElementById('visualMode').options].slice(0, 10);
       const startingMode = mode();
@@ -424,10 +526,10 @@
           const code = i < 9 ? `Digit${i + 1}` : 'Digit0';
           // document.body, not document: the app's key guard calls e.target.matches().
           document.body.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 500));
           await waitForFocus(focusTimeoutMs);
           this.mark(`mode-${code}-${mode()}`);
-          await new Promise(r => setTimeout(r, dwellMs));
+          await new Promise((r) => setTimeout(r, dwellMs));
         }
         this.mark('sweep-complete');
         console.log('[hw] sweep complete');
@@ -437,8 +539,10 @@
       const rows = fpsByMode();
       for (const r of Object.values(rows)) {
         if (!r.clean) {
-          console.warn(`[hw] ${r.mode}: ${r.samples} trusted frames, skipped ${r.skippedHidden} hidden / ` +
-                       `${r.skippedUnfocused} unfocused. Click the page, keep it focused, and re-run.`);
+          console.warn(
+            `[hw] ${r.mode}: ${r.samples} trusted frames, skipped ${r.skippedHidden} hidden / ` +
+              `${r.skippedUnfocused} unfocused. Click the page, keep it focused, and re-run.`
+          );
         }
       }
       return rows;
@@ -462,10 +566,12 @@
       const box = document.getElementById('reduceFlash');
       const cue = makeCue();
       const peak = () => vis().flashIntensity;
-      box.checked = false; box.dispatchEvent(new Event('change'));
+      box.checked = false;
+      box.dispatchEvent(new Event('change'));
       await cue.hold('REDUCE FLASH: OFF', 'flash-off', secs);
       const off = peak();
-      box.checked = true; box.dispatchEvent(new Event('change'));
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
       await cue.hold('REDUCE FLASH: ON', 'flash-on', secs);
       const on = peak();
       this.mark('flash-done');
@@ -473,12 +579,16 @@
       return { flashIntensityOff: off, flashIntensityOn: on, damped: on < off };
     },
 
-    bandVerdict, fpsByMode, bpmSummary,
+    bandVerdict,
+    fpsByMode,
+    bpmSummary,
 
     report() {
       const r = {
-        env: state.env, marks: state.marks.map(m => m.name),
-        fpsByMode: fpsByMode(), bpm: bpmSummary(),
+        env: state.env,
+        marks: state.marks.map((m) => m.name),
+        fpsByMode: fpsByMode(),
+        bpm: bpmSummary(),
         solo: { bass: bandVerdict('solo-bass', 'bass'), hats: bandVerdict('solo-hats', 'high') },
         errors: state.errors,
         counts: { bands: state.bands.length, bpm: state.bpm.length, frames: state.frames.length }
@@ -493,15 +603,21 @@
     /** Bring back a run that a reload would otherwise have erased. */
     restore() {
       const prior = localStorage.getItem(STORE_KEY);
-      if (!prior) { console.warn('[hw] nothing stored'); return null; }
+      if (!prior) {
+        console.warn('[hw] nothing stored');
+        return null;
+      }
       const p = JSON.parse(prior);
-      console.log(`[hw] stored run ${p.startedAt}: ${p.marks.length} marks, ` +
-                  `${p.bands.length} band samples, ${p.frames.length} frames`);
+      console.log(
+        `[hw] stored run ${p.startedAt}: ${p.marks.length} marks, ` +
+          `${p.bands.length} band samples, ${p.frames.length} frames`
+      );
       return p;
     },
 
     stop() {
-      clearInterval(bandTimer); clearInterval(bpmTimer);
+      clearInterval(bandTimer);
+      clearInterval(bpmTimer);
       vis().onFrame = priorOnFrame;
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
@@ -529,7 +645,9 @@
       ];
       for (const r of Object.values(rows)) {
         const skipped = r.clean ? '0' : `${r.skippedHidden}/${r.skippedUnfocused} — re-run`;
-        lines.push(`| ${r.mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.min ?? '—'} | ${r.slowPer1000 ?? '—'} | ${r.samples} | ${skipped} |`);
+        lines.push(
+          `| ${r.mode} | ${r.p50 ?? '—'} | ${r.p05 ?? '—'} | ${r.min ?? '—'} | ${r.slowPer1000 ?? '—'} | ${r.samples} | ${skipped} |`
+        );
       }
       const md = lines.join('\n');
       console.log(md);

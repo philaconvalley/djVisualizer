@@ -1,5 +1,7 @@
 # DJ Visualizer
 
+[![Format](https://github.com/philaconvalley/djVisualizer/actions/workflows/format.yml/badge.svg)](https://github.com/philaconvalley/djVisualizer/actions/workflows/format.yml)
+
 A web-based audio visualizer for DJs, built with plain JavaScript and the Web
 Audio API. It listens to **live audio input from your hardware** — a controller,
 a mixer, or a microphone — and turns it into projected visuals in real time.
@@ -64,6 +66,9 @@ Open `http://localhost:8000`, pick a source, and press Start.
 
 There is no build step and no runtime dependency to install. p5.js is vendored
 in `vendor/` on purpose — the app must never need the network at showtime.
+
+`npm install` is optional. You need it only to contribute: it installs the
+test harness and the formatter, and nothing the app needs to run.
 
 ### Verify it
 

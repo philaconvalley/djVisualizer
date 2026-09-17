@@ -3,7 +3,7 @@ class DJVisualizerApp {
     this.audioProcessor = new AudioProcessor();
     this.visualizer = new DJVisualizer();
     this.isRunning = false;
-    
+
     this.startBtn = null;
     this.fullscreenBtn = null;
     this.deviceStatusSpan = null;
@@ -11,7 +11,7 @@ class DJVisualizerApp {
     this.fpsCounter = null;
     this.lastFrameTime = 0;
     this.frameCount = 0;
-    
+
     // Gain controls
     this.bassGain = 1.0;
     this.midGain = 1.0;
@@ -33,9 +33,8 @@ class DJVisualizerApp {
     this.errorBannerHideTimeout = null;
     // Read the transition duration from the token itself rather than
     // hardcoding it a second time — see DESIGN.md's Motion section.
-    this.errorBannerTransitionMs = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--overlay')
-    ) || 200;
+    this.errorBannerTransitionMs =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--overlay')) || 200;
 
     // Set up event listeners
     this.startBtn.addEventListener('click', () => this.toggleAudio());
@@ -43,7 +42,9 @@ class DJVisualizerApp {
     // The browser owns fullscreen state, and Esc leaves fullscreen without
     // calling toggleFullscreen(). Derive the label from the browser's event.
     document.addEventListener('fullscreenchange', () => {
-      this.fullscreenBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+      this.fullscreenBtn.textContent = document.fullscreenElement
+        ? 'Exit Fullscreen'
+        : 'Fullscreen';
     });
     this.audioInputSelect.addEventListener('change', () => this.onDeviceSelectionChange());
 
@@ -59,7 +60,7 @@ class DJVisualizerApp {
     // Set up gain controls
     this.setupGainControls();
     this.setupConsoleChrome();
-    
+
     // Set up keyboard shortcuts for live performance
     document.addEventListener('keydown', (e) => {
       // Only text entry should swallow shortcuts. A focused range slider must not
@@ -87,7 +88,7 @@ class DJVisualizerApp {
         return;
       }
 
-      switch(e.code) {
+      switch (e.code) {
         case 'Space':
           e.preventDefault();
           this.toggleAudio();
@@ -153,7 +154,7 @@ class DJVisualizerApp {
       // Check if we already have permission
       const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
       console.log('Microphone permission status:', permissionStatus.state);
-      
+
       if (permissionStatus.state === 'denied') {
         this.deviceStatusSpan.textContent = 'Microphone access denied';
         console.warn('Microphone permission denied');
@@ -183,32 +184,32 @@ class DJVisualizerApp {
       console.log('Enumerating audio input devices...');
       const inputs = await this.audioProcessor.listInputs();
       console.log('Available audio inputs:', inputs);
-      
+
       // Clear existing options except the first one
       while (this.audioInputSelect.children.length > 1) {
         this.audioInputSelect.removeChild(this.audioInputSelect.lastChild);
       }
-      
+
       if (inputs.length === 0) {
         console.warn('No audio input devices detected');
         this.deviceStatusSpan.textContent = 'No audio devices found';
         return;
       }
-      
+
       // Add all available inputs to the dropdown
-      inputs.forEach(input => {
+      inputs.forEach((input) => {
         const option = document.createElement('option');
         option.value = input.deviceId;
         option.textContent = input.label;
-        
+
         // DJ hardware already sorts first; the prefix is typographic, not an icon.
         if (input.isDJ) {
           option.textContent = `DJ · ${input.label}`;
         }
-        
+
         this.audioInputSelect.appendChild(option);
       });
-      
+
       // Inputs arrive rank-sorted, so the best available device is the first
       // one either way. What changes is what we tell the operator: falling
       // back to a microphone is not the same as finding the controller, and
@@ -223,7 +224,6 @@ class DJVisualizerApp {
           : `No DJ hardware found - using ${selected.label}`;
         console.log('Auto-selected input:', selected.label, '(rank', selected.rank + ')');
       }
-      
     } catch (error) {
       console.error('Error enumerating audio devices:', error);
       this.deviceStatusSpan.textContent = 'Error detecting devices';
@@ -233,7 +233,7 @@ class DJVisualizerApp {
 
   onDeviceSelectionChange() {
     const selectedValue = this.audioInputSelect.value;
-    
+
     if (selectedValue === '') {
       // Auto-select mode
       this.selectedDeviceId = null;
@@ -244,9 +244,9 @@ class DJVisualizerApp {
       const selectedOption = this.audioInputSelect.selectedOptions[0];
       this.deviceStatusSpan.textContent = `Selected: ${selectedOption.textContent.replace('DJ · ', '')}`;
     }
-    
+
     console.log('Device selection changed to:', this.selectedDeviceId || 'auto-select');
-    
+
     // If audio is currently running, restart with new device
     if (this.isRunning) {
       console.log('Restarting audio with new device...');
@@ -258,14 +258,14 @@ class DJVisualizerApp {
     try {
       // Stop current audio
       this.audioProcessor.stop();
-      
+
       // Small delay to ensure cleanup
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Start with new device
       await this.audioProcessor.startAudio(this.selectedDeviceId);
       this.visualizer.start();
-      
+
       console.log('Audio restarted with new device');
     } catch (error) {
       console.error('Failed to restart audio with new device:', error);
@@ -288,20 +288,20 @@ class DJVisualizerApp {
       this.deviceStatusSpan.textContent = 'Requesting audio access...';
       this.setTransport('Starting');
       this.startBtn.disabled = true;
-      
+
       // Use selected device or let the system auto-select
       await this.audioProcessor.startAudio(this.selectedDeviceId);
       this.visualizer.start();
       this.isRunning = true;
       this.setTransport('Stop', true);
       this.startBtn.disabled = false;
-      
+
       // Update status to show active device
-      const currentDevice = this.selectedDeviceId ? 
-        this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '') : 
-        'Auto-selected device';
+      const currentDevice = this.selectedDeviceId
+        ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
+        : 'Auto-selected device';
       this.deviceStatusSpan.textContent = `Active: ${currentDevice}`;
-      
+
       console.log('DJ Visualizer started with device:', currentDevice);
     } catch (error) {
       console.error('Failed to start audio:', error);
@@ -323,7 +323,8 @@ class DJVisualizerApp {
     let message = 'Failed to start audio: ';
 
     if (error.name === 'NotAllowedError') {
-      message += 'Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow access.';
+      message +=
+        "Microphone access denied. Please click the microphone icon in your browser's address bar and allow access.";
     } else if (error.name === 'NotFoundError') {
       message += 'No audio input device found. Please connect a microphone or audio device.';
     } else if (error.name === 'NotReadableError') {
@@ -382,16 +383,16 @@ class DJVisualizerApp {
   stopAudio() {
     this.audioProcessor.stop();
     this.visualizer.stop();
-    
+
     this.isRunning = false;
     this.setTransport('Start', false);
-    
+
     // Update status to show ready state
-    const selectedDevice = this.selectedDeviceId ? 
-      this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '') : 
-      'Auto-select mode';
+    const selectedDevice = this.selectedDeviceId
+      ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
+      : 'Auto-select mode';
     this.deviceStatusSpan.textContent = `Ready: ${selectedDevice}`;
-    
+
     console.log('DJ Visualizer stopped');
   }
 
@@ -402,35 +403,33 @@ class DJVisualizerApp {
     const bassValue = document.getElementById('bassValue');
     const midValue = document.getElementById('midValue');
     const highValue = document.getElementById('highValue');
-    
+
     bassSlider.addEventListener('input', (e) => {
       this.bassGain = parseFloat(e.target.value);
       bassValue.textContent = this.bassGain.toFixed(1);
     });
-    
+
     midSlider.addEventListener('input', (e) => {
       this.midGain = parseFloat(e.target.value);
       midValue.textContent = this.midGain.toFixed(1);
     });
-    
+
     highSlider.addEventListener('input', (e) => {
       this.highGain = parseFloat(e.target.value);
       highValue.textContent = this.highGain.toFixed(1);
     });
   }
-  
-  
-  
+
   toggleFullscreen() {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
+      document.documentElement.requestFullscreen().catch((err) => {
         console.error('Error entering fullscreen:', err);
       });
     } else {
       document.exitFullscreen();
     }
   }
-  
+
   switchVisualizationMode(mode) {
     const visualModeSelect = document.getElementById('visualMode');
     if (visualModeSelect) {
@@ -443,12 +442,12 @@ class DJVisualizerApp {
     this.bassGain = 1.0;
     this.midGain = 1.0;
     this.highGain = 1.0;
-    
+
     // Update UI sliders
     const bassSlider = document.getElementById('bassGain');
     const midSlider = document.getElementById('midGain');
     const highSlider = document.getElementById('highGain');
-    
+
     if (bassSlider) {
       bassSlider.value = 1.0;
       document.getElementById('bassValue').textContent = '1.0';
@@ -507,7 +506,10 @@ class DJVisualizerApp {
       flash.checked = query.matches;
       apply();
       flash.addEventListener('change', apply);
-      query.addEventListener?.('change', (e) => { flash.checked = e.matches; apply(); });
+      query.addEventListener?.('change', (e) => {
+        flash.checked = e.matches;
+        apply();
+      });
     }
   }
 
@@ -566,7 +568,7 @@ class DJVisualizerApp {
   updateFPS() {
     this.frameCount++;
     const currentTime = performance.now();
-    
+
     if (currentTime - this.lastFrameTime >= 1000) {
       const fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFrameTime));
       this.fpsCounter.textContent = fps;

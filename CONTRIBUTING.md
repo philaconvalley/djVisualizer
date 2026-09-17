@@ -36,6 +36,26 @@ directly — `getUserMedia` needs a secure context, and `localhost` counts.
 You need an audio input. Any microphone works for development; DJ hardware is
 auto-detected and sorted first when present.
 
+## Formatting
+
+```sh
+npm install            # devDependencies only
+npm run format         # rewrite files in place
+npm run format:check   # what CI runs on every pull request
+```
+
+Prettier formats the JavaScript, HTML, CSS, and YAML. It skips `vendor/` and
+Markdown. The version is pinned exactly, so everyone and CI format the same
+way. A pull request that fails the format check cannot merge.
+
+The repo was reformatted once, in a single commit that changed nothing else.
+That commit is listed in `.git-blame-ignore-revs`. GitHub's blame view skips it
+automatically. To make local `git blame` skip it too, run this once:
+
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Verifying a change
 
 ```sh

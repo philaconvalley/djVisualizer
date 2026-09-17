@@ -1,0 +1,31 @@
+# Checks formatting on every pull request. Formatting only: it does not run the
+# app, and it is a separate workflow from smoke.yml on purpose. smoke.yml never
+# runs on pull requests, so a check placed there could not block a merge. And a
+# formatting failure must never be able to hide a deploy failure.
+name: Format
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # npm ci installs the exact Prettier version in package-lock.json. A newer
+      # release can format one construct differently and fail every open PR at
+      # once, for a reason no contributor caused.
+      - run: npm ci
+
+      - run: npm run format:check
