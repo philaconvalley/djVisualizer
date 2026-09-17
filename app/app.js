@@ -40,6 +40,11 @@ class DJVisualizerApp {
     // Set up event listeners
     this.startBtn.addEventListener('click', () => this.toggleAudio());
     this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    // The browser owns fullscreen state, and Esc leaves fullscreen without
+    // calling toggleFullscreen(). Derive the label from the browser's event.
+    document.addEventListener('fullscreenchange', () => {
+      this.fullscreenBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+    });
     this.audioInputSelect.addEventListener('change', () => this.onDeviceSelectionChange());
 
     // Error banner: manual close, plus an auto-dismiss timer that pauses
@@ -60,6 +65,11 @@ class DJVisualizerApp {
       // Only text entry should swallow shortcuts. A focused range slider must not
       // kill Space and F, or the transport dies as soon as you touch a band.
       if (e.target.matches('input[type="file"], input[type="text"], textarea')) return;
+
+      // Space is the one key a focused dropdown needs for itself: it opens the
+      // option list. Every other shortcut stays live, because blocking F here
+      // lets the dropdown's type-ahead jump the mode to Floating Particles.
+      if (e.code === 'Space' && e.target.tagName === 'SELECT') return;
 
       // Every mode in the dropdown is reachable, in dropdown order. 1-9 then 0
       // for the tenth, following the convention browsers use for tabs. A mode
@@ -416,10 +426,8 @@ class DJVisualizerApp {
       document.documentElement.requestFullscreen().catch(err => {
         console.error('Error entering fullscreen:', err);
       });
-      this.fullscreenBtn.textContent = 'Exit Fullscreen';
     } else {
       document.exitFullscreen();
-      this.fullscreenBtn.textContent = 'Fullscreen';
     }
   }
   
