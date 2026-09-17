@@ -159,7 +159,7 @@ class DJVisualizerApp {
     try {
       // Check if we already have permission
       const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
-      console.log('Microphone permission status:', permissionStatus.state);
+      if (DEBUG) console.log('Microphone permission status:', permissionStatus.state);
 
       if (permissionStatus.state === 'denied') {
         this.deviceStatusSpan.textContent = 'Microphone access denied';
@@ -187,9 +187,9 @@ class DJVisualizerApp {
     }
 
     try {
-      console.log('Enumerating audio input devices...');
+      if (DEBUG) console.log('Enumerating audio input devices...');
       const inputs = await this.audioProcessor.listInputs();
-      console.log('Available audio inputs:', inputs);
+      if (DEBUG) console.log('Available audio inputs:', inputs);
 
       // Clear existing options except the first one
       while (this.audioInputSelect.children.length > 1) {
@@ -228,7 +228,9 @@ class DJVisualizerApp {
         this.deviceStatusSpan.textContent = djInput
           ? `Ready: ${selected.label}`
           : `No DJ hardware found - using ${selected.label}`;
-        console.log('Auto-selected input:', selected.label, '(rank', selected.rank + ')');
+        if (DEBUG) {
+          console.log('Auto-selected input:', selected.label, '(rank', selected.rank + ')');
+        }
       }
     } catch (error) {
       console.error('Error enumerating audio devices:', error);
@@ -251,11 +253,11 @@ class DJVisualizerApp {
       this.deviceStatusSpan.textContent = `Selected: ${selectedOption.textContent.replace('DJ · ', '')}`;
     }
 
-    console.log('Device selection changed to:', this.selectedDeviceId || 'auto-select');
+    if (DEBUG) console.log('Device selection changed to:', this.selectedDeviceId || 'auto-select');
 
     // If audio is currently running, restart with new device
     if (this.isRunning) {
-      console.log('Restarting audio with new device...');
+      if (DEBUG) console.log('Restarting audio with new device...');
       this.restartAudioWithNewDevice();
     }
   }
@@ -276,7 +278,7 @@ class DJVisualizerApp {
       // flowing again, the rail must say what it says after a normal start.
       this.deviceStatusSpan.textContent = this.activeStatus();
 
-      console.log('Audio restarted with new device');
+      if (DEBUG) console.log('Audio restarted with new device');
     } catch (error) {
       console.error('Failed to restart audio with new device:', error);
       this.stopAudio();
@@ -318,7 +320,7 @@ class DJVisualizerApp {
       // Update status to show active device
       this.deviceStatusSpan.textContent = this.activeStatus();
 
-      console.log('DJ Visualizer started:', this.deviceStatusSpan.textContent);
+      if (DEBUG) console.log('DJ Visualizer started:', this.deviceStatusSpan.textContent);
     } catch (error) {
       console.error('Failed to start audio:', error);
       this.setTransport('Start', false);
@@ -433,7 +435,7 @@ class DJVisualizerApp {
       : 'Auto-select mode';
     this.deviceStatusSpan.textContent = `Ready: ${selectedDevice}`;
 
-    console.log('DJ Visualizer stopped');
+    if (DEBUG) console.log('DJ Visualizer stopped');
   }
 
   setupGainControls() {
