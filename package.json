@@ -11,9 +11,14 @@
     "verify": "node test/fixtures/make-audio.mjs && node test/verify-audio.mjs",
     "smoke": "node test/smoke-deploy.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
     "playwright": "^1.62.0",
     "prettier": "3.9.7"
   }

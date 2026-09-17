@@ -1,0 +1,30 @@
+# Lints JavaScript on every pull request. Its own workflow, like format.yml:
+# a lint failure and a format failure are different problems, and each check
+# is required on main by its job name.
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # Exact versions from package-lock.json, for the same reason as the
+      # format check: a new ESLint release can add a rule to its recommended
+      # set and fail every open PR at once.
+      - run: npm ci
+
+      - run: npm run lint
