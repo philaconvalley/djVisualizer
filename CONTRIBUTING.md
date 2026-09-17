@@ -36,17 +36,31 @@ directly — `getUserMedia` needs a secure context, and `localhost` counts.
 You need an audio input. Any microphone works for development; DJ hardware is
 auto-detected and sorted first when present.
 
-## Formatting
+## Formatting and linting
 
 ```sh
 npm install            # devDependencies only
 npm run format         # rewrite files in place
-npm run format:check   # what CI runs on every pull request
+npm run format:check   # checked on every pull request
+npm run lint           # checked on every pull request
+npm run lint:fix       # apply ESLint's automatic fixes
 ```
 
 Prettier formats the JavaScript, HTML, CSS, and YAML. It skips `vendor/` and
 Markdown. The version is pinned exactly, so everyone and CI format the same
 way. A pull request that fails the format check cannot merge.
+
+ESLint runs its recommended rules, which catch real bugs here: a duplicate
+class method silently replaces the first one, and a value computed but never
+read often means code that was never connected. Both have happened in this
+repo. A pull request that fails lint cannot merge.
+
+The three app scripts share one global scope, because `index.html` loads them
+as classic scripts. `eslint.config.mjs` declares each shared name only in the
+files that read it, so a typo in a global name still fails. Those declarations
+are temporary: they go away when the app moves to ES modules (PHI-163). If you
+add a name that another file reads, declare it there too, rather than turning
+off `no-undef`.
 
 The repo was reformatted once, in a single commit that changed nothing else.
 That commit is listed in `.git-blame-ignore-revs`. GitHub's blame view skips it
