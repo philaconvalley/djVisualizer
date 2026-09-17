@@ -1,0 +1,14 @@
+# Vendored third-party code. p5 is committed on purpose (no network at
+# showtime) and must stay byte-identical to the upstream release.
+vendor/
+
+# Generated or local state.
+package-lock.json
+test/output/
+test/fixtures/*.wav
+.impeccable/
+.claude/
+
+# Prose is out of scope for now. Prettier rewrites Markdown tables and list
+# markers, and the docs here are read far more than they are edited.
+*.md
