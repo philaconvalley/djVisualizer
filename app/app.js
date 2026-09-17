@@ -12,6 +12,11 @@ class DJVisualizerApp {
     this.lastFrameTime = 0;
     this.frameCount = 0;
 
+    // Whether the rail is currently showing the no-signal message, and what it
+    // showed before, so the message can step aside when signal returns.
+    this.noSignal = false;
+    this.statusBeforeNoSignal = '';
+
     // Gain controls
     this.bassGain = 1.0;
     this.midGain = 1.0;
@@ -128,6 +133,7 @@ class DJVisualizerApp {
       };
       this.visualizer.updateAudioData(adjustedData);
       this.updateBPM(data.bpm);
+      this.updateSignalStatus(data.silentForMs);
     };
 
     // FPS is a rendering measurement and has to be counted where rendering
@@ -380,11 +386,35 @@ class DJVisualizerApp {
     }
   }
 
+  // "Active" means a stream opened, not that audio is arriving. A stream that
+  // opens and delivers only digital silence would otherwise read exactly like a
+  // working one, at load-in, when there is still time to fix it.
+  //
+  // Three seconds rides over a gap between tracks. The message suggests rather
+  // than alarms, never blocks anything, and clears the moment signal returns.
+  updateSignalStatus(silentForMs) {
+    const NO_SIGNAL_AFTER_MS = 3000;
+    const NO_SIGNAL_TEXT = 'No signal \u2014 check the mixer output';
+
+    const silent = this.isRunning && silentForMs >= NO_SIGNAL_AFTER_MS;
+    if (silent === this.noSignal) return;
+    this.noSignal = silent;
+
+    if (silent) {
+      this.statusBeforeNoSignal = this.deviceStatusSpan.textContent;
+      this.deviceStatusSpan.textContent = NO_SIGNAL_TEXT;
+    } else if (this.deviceStatusSpan.textContent === NO_SIGNAL_TEXT) {
+      // Only restore if nothing else has written to the rail in the meantime.
+      this.deviceStatusSpan.textContent = this.statusBeforeNoSignal;
+    }
+  }
+
   stopAudio() {
     this.audioProcessor.stop();
     this.visualizer.stop();
 
     this.isRunning = false;
+    this.noSignal = false;
     this.setTransport('Start', false);
 
     // Update status to show ready state

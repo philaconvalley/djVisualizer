@@ -79,6 +79,12 @@ registerProcessor('kick-envelope', KickEnvelope);
 `;
 
 class AudioProcessor {
+  // Peak level below which an input counts as carrying no signal: -80 dBFS.
+  // Only a dead input gets this low. A loopback with nothing routed to it, a
+  // muted channel, or the wrong output all deliver exact digital zeros, while
+  // a quiet room mic or the hiss between two tracks sits far above it.
+  static SILENCE_PEAK = 0.0001;
+
   constructor() {
     this.audioContext = null;
     this.sourceNode = null;
@@ -137,6 +143,8 @@ class AudioProcessor {
     this.bpmSmoothingFactor = 0.3;
     this.dataArray = null;
     this.timeDataArray = null;
+    this.floatTimeData = null;
+    this.silentSince = null;
     this.isRunning = false;
 
     // Callbacks
@@ -347,6 +355,18 @@ class AudioProcessor {
       const currentRMS = this.calculateRMS(this.timeDataArray) * 0.4;
       this.rms += (currentRMS - this.rms) * settle(0.075);
 
+      // Silence is judged on float samples, not the byte data above. Bytes are
+      // quantised to 8 bits, which reads every signal below about -50 dBFS as
+      // the same value, so they cannot tell a quiet input from a dead one.
+      this.analyserNode.getFloatTimeDomainData(this.floatTimeData);
+      let peak = 0;
+      for (const sample of this.floatTimeData) {
+        const level = Math.abs(sample);
+        if (level > peak) peak = level;
+      }
+      if (peak >= AudioProcessor.SILENCE_PEAK) this.silentSince = null;
+      else if (this.silentSince === null) this.silentSince = now;
+
       // Convert byte frequency data to float spectrum
       this.spectrum = Array.from(this.dataArray).map((val) => val / 255);
 
@@ -381,7 +401,10 @@ class AudioProcessor {
           // each bin means rather than guessing from the array length.
           sampleRate,
           binHz: AudioProcessor.binWidth(this.spectrum, sampleRate),
-          isActive: (this.rms || 0) > 0.001
+          isActive: (this.rms || 0) > 0.001,
+          // How long the input has carried no signal at all. The app decides
+          // what that means; this only measures it.
+          silentForMs: this.silentSince === null ? 0 : now - this.silentSince
         });
       }
     } catch (error) {
@@ -469,6 +492,8 @@ class AudioProcessor {
       const bufferLength = this.analyserNode.frequencyBinCount;
       this.dataArray = new Uint8Array(bufferLength);
       this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
+      this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
+      this.silentSince = null;
 
       // Reset audio values
       this.rms = this.bass = this.mid = this.high = 0;
@@ -553,6 +578,7 @@ class AudioProcessor {
 
     // Reset audio data
     this.rms = this.bass = this.mid = this.high = 0;
+    this.silentSince = null;
     this.spectrum = [];
     this.bpm = 0;
     this.beatHistory = [];
