@@ -62,7 +62,7 @@ function serve() {
   return new Promise((resolve) => server.listen(PORT, () => resolve(server)));
 }
 
-async function withAudio(wav, run, beforeStart) {
+async function withAudio(wav, run, beforeStart, { query = '' } = {}) {
   const browser = await chromium.launch({
     args: [
       '--use-fake-ui-for-media-stream',
@@ -81,12 +81,14 @@ async function withAudio(wav, run, beforeStart) {
   const page = await context.newPage();
 
   const errors = [];
+  const logs = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'log') logs.push(m.text());
   });
 
-  await page.goto(BASE, { waitUntil: 'load' });
+  await page.goto(`${BASE}/${query}`, { waitUntil: 'load' });
   // `djApp` is a top-level `let` in a classic script, so it lives in the global
   // lexical scope rather than on `window` — reachable bare, not as a property.
   await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
@@ -96,7 +98,7 @@ async function withAudio(wav, run, beforeStart) {
   await page.waitForTimeout(2500);
 
   try {
-    await run(page, errors);
+    await run(page, errors, logs);
   } finally {
     await browser.close();
   }
@@ -588,6 +590,53 @@ async function deviceTest() {
   });
 }
 
+/* Logging is for whoever is debugging, not for the operator mid-set. A normal
+ * load keeps the console clean; ?debug brings the device-path logs back, since
+ * they are the first thing to read when a controller does not appear. PHI-153.
+ */
+async function loggingTest() {
+  console.log('\nLogging → quiet by default, full output with ?debug');
+  const stopAudio = (page) => page.click('#start').then(() => page.waitForTimeout(200));
+
+  await withAudio('tone-1khz.wav', async (page, errors, logs) => {
+    await stopAudio(page);
+    check('a normal load logs nothing', logs.length === 0, logs[0] || 'clean');
+  });
+
+  await withAudio(
+    'tone-1khz.wav',
+    async (page, errors, logs) => {
+      await stopAudio(page);
+      const expected = ['Available audio inputs', 'Audio started successfully', 'Audio stopped'];
+      const missing = expected.filter((text) => !logs.some((l) => l.startsWith(text)));
+      check(
+        '?debug restores the lifecycle logs',
+        missing.length === 0,
+        missing.join(', ') || `${logs.length} logs`
+      );
+    },
+    null,
+    { query: '?debug' }
+  );
+
+  // The analysis tick runs at 60 Hz. A fault inside it must be reported once,
+  // not 60 times a second, or the log itself becomes the next problem.
+  await withAudio('tone-1khz.wav', async (page, errors) => {
+    await page.evaluate(() => {
+      djApp.audioProcessor.analyserNode.getByteFrequencyData = () => {
+        throw new Error('forced analysis fault');
+      };
+    });
+    await page.waitForTimeout(1000);
+    const reports = errors.filter((e) => e.includes('Error in audio data update'));
+    check(
+      'a repeating analysis fault is reported once',
+      reports.length === 1,
+      `${reports.length} reports in 1 s`
+    );
+  });
+}
+
 const server = await serve();
 try {
   if (!existsSync(join(HERE, 'fixtures', 'tone-100hz.wav'))) {
@@ -610,6 +659,7 @@ try {
   await silenceTest();
   await noSignalTest();
   await deviceSwitchTest();
+  await loggingTest();
 } finally {
   server.close();
 }
