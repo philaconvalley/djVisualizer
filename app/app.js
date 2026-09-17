@@ -272,12 +272,25 @@ class DJVisualizerApp {
       await this.audioProcessor.startAudio(this.selectedDeviceId);
       this.visualizer.start();
 
+      // The change handler wrote "Selected:" before the restart. Once audio is
+      // flowing again, the rail must say what it says after a normal start.
+      this.deviceStatusSpan.textContent = this.activeStatus();
+
       console.log('Audio restarted with new device');
     } catch (error) {
       console.error('Failed to restart audio with new device:', error);
       this.stopAudio();
       this.showError('Failed to switch audio device. Please try again.');
     }
+  }
+
+  // What the rail says while audio is running. One place, so a normal start
+  // and a device switch mid-run can never describe the same state differently.
+  activeStatus() {
+    const device = this.selectedDeviceId
+      ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
+      : 'Auto-selected device';
+    return `Active: ${device}`;
   }
 
   async toggleAudio() {
@@ -303,12 +316,9 @@ class DJVisualizerApp {
       this.startBtn.disabled = false;
 
       // Update status to show active device
-      const currentDevice = this.selectedDeviceId
-        ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
-        : 'Auto-selected device';
-      this.deviceStatusSpan.textContent = `Active: ${currentDevice}`;
+      this.deviceStatusSpan.textContent = this.activeStatus();
 
-      console.log('DJ Visualizer started with device:', currentDevice);
+      console.log('DJ Visualizer started:', this.deviceStatusSpan.textContent);
     } catch (error) {
       console.error('Failed to start audio:', error);
       this.setTransport('Start', false);

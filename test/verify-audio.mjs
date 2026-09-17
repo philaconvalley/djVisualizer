@@ -402,6 +402,38 @@ async function noSignalTest() {
   );
 }
 
+/* Switching the source while audio runs restarts the stream. The rail must end
+ * up saying "Active", as it does after a normal start, not keep the "Selected"
+ * label the dropdown's change handler writes before the restart.
+ */
+async function deviceSwitchTest() {
+  console.log('\nDevice switch mid-run → the rail must say what is running');
+  await withAudio('tone-1khz.wav', async (page, errors) => {
+    const switchedTo = await page.evaluate(() => {
+      const select = document.getElementById('audioInputSelect');
+      const other = [...select.options].find((o) => o.value && o.value !== select.value);
+      select.value = other ? other.value : '';
+      select.dispatchEvent(new Event('change'));
+      return select.selectedOptions[0].textContent;
+    });
+    const active = await page
+      .waitForFunction(
+        () => document.getElementById('deviceStatus').textContent.startsWith('Active:'),
+        null,
+        { timeout: 3000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    const text = await railText(page);
+    check(
+      'rail says Active after a device switch',
+      active,
+      `switched to "${switchedTo}", rail "${text}"`
+    );
+    check('device switch raises no page errors', errors.length === 0, errors[0] || 'clean');
+  });
+}
+
 /* Device labels observed on the DJ laptop during the PHI-171 hardware run.
  *
  * Three virtual audio drivers is a normal working DJ machine, not an exotic
@@ -577,6 +609,7 @@ try {
   await modeTest();
   await silenceTest();
   await noSignalTest();
+  await deviceSwitchTest();
 } finally {
   server.close();
 }
