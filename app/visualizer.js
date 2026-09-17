@@ -861,8 +861,14 @@ class DJVisualizer {
     const POINTS = 40;
     const rows = { bass: this.vh * 0.3, mid: this.vh * 0.02, high: -this.vh * 0.3 };
 
+    // One full cycle per beat, on the beat clock, so there is no jump when
+    // phase wraps. The two terms travel in opposite directions: the original
+    // gave them different wall-clock speeds, and the interference between
+    // them is what makes the line look like water rather than a sliding sine.
+    const beat = this.phase * Math.PI * 2;
+
     for (let layer = 0; layer < 2; layer++) {
-      const phase = layer * 0.4;
+      const layerOffset = layer * 0.4;
 
       for (const name of bands) {
         const lit = levels[name];
@@ -878,8 +884,8 @@ class DJVisualizer {
             p.beginShape();
             for (let i = 0; i < POINTS; i++) {
               const x = (i / (POINTS - 1) - 0.5) * this.vw;
-              const wave = Math.sin(i * 0.25 + this.time * 2.5 + phase) * amp;
-              const flow = Math.cos(i * 0.18 + this.time * 3.2) * amp * 0.35;
+              const wave = Math.sin(i * 0.25 + beat + layerOffset) * amp;
+              const flow = Math.cos(i * 0.18 - beat) * amp * 0.35;
               p.vertex(x, baseY + wave + flow);
             }
             p.endShape();
