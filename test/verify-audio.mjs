@@ -34,8 +34,11 @@ const PORT = 8123;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript',
-  '.css': 'text/css', '.gif': 'image/gif', '.png': 'image/png'
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.gif': 'image/gif',
+  '.png': 'image/png'
 };
 
 const results = [];
@@ -56,7 +59,7 @@ function serve() {
       res.writeHead(404).end('not found');
     }
   });
-  return new Promise(resolve => server.listen(PORT, () => resolve(server)));
+  return new Promise((resolve) => server.listen(PORT, () => resolve(server)));
 }
 
 async function withAudio(wav, run, beforeStart) {
@@ -78,8 +81,10 @@ async function withAudio(wav, run, beforeStart) {
   const page = await context.newPage();
 
   const errors = [];
-  page.on('pageerror', e => errors.push(String(e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
 
   await page.goto(BASE, { waitUntil: 'load' });
   // `djApp` is a top-level `let` in a classic script, so it lives in the global
@@ -97,68 +102,92 @@ async function withAudio(wav, run, beforeStart) {
   }
 }
 
-const read = (page) => page.evaluate(() => ({
-  bass: djApp.audioProcessor.bass,
-  mid: djApp.audioProcessor.mid,
-  high: djApp.audioProcessor.high,
-  rms: djApp.audioProcessor.rms,
-  bpm: djApp.audioProcessor.bpm,
-  binHz: (djApp.audioProcessor.audioContext?.sampleRate / 2) /
-         (djApp.audioProcessor.spectrum?.length || 1),
-  meters: {
-    bass: document.querySelector('.bass-fill')?.style.width,
-    mid: document.querySelector('.mid-fill')?.style.width,
-    high: document.querySelector('.high-fill')?.style.width
-  }
-}));
+const read = (page) =>
+  page.evaluate(() => ({
+    bass: djApp.audioProcessor.bass,
+    mid: djApp.audioProcessor.mid,
+    high: djApp.audioProcessor.high,
+    rms: djApp.audioProcessor.rms,
+    bpm: djApp.audioProcessor.bpm,
+    binHz:
+      djApp.audioProcessor.audioContext?.sampleRate /
+      2 /
+      (djApp.audioProcessor.spectrum?.length || 1),
+    meters: {
+      bass: document.querySelector('.bass-fill')?.style.width,
+      mid: document.querySelector('.mid-fill')?.style.width,
+      high: document.querySelector('.high-fill')?.style.width
+    }
+  }));
 
 async function bandTest(wav, expected, hz) {
   console.log(`\n${hz} Hz tone → expecting "${expected}" to dominate`);
   await withAudio(wav, async (page, errors) => {
     const state = await read(page);
-    const others = ['bass', 'mid', 'high'].filter(b => b !== expected);
+    const others = ['bass', 'mid', 'high'].filter((b) => b !== expected);
     const top = state[expected];
-    const rest = Math.max(...others.map(b => state[b]));
+    const rest = Math.max(...others.map((b) => state[b]));
 
-    console.log(`        bass=${state.bass.toFixed(3)} mid=${state.mid.toFixed(3)} high=${state.high.toFixed(3)}  binHz=${state.binHz.toFixed(1)}`);
+    console.log(
+      `        bass=${state.bass.toFixed(3)} mid=${state.mid.toFixed(3)} high=${state.high.toFixed(3)}  binHz=${state.binHz.toFixed(1)}`
+    );
 
     check(`${hz} Hz registers in ${expected}`, top > 0.05, `${expected}=${top.toFixed(3)}`);
-    check(`${hz} Hz does not bleed into ${others.join('/')}`, top > rest * 2.5,
-      `${expected}=${top.toFixed(3)} vs next=${rest.toFixed(3)}`);
-    check(`${hz} Hz meter tracks the band`, state.meters[expected] !== '0%' &&
-      state.meters[expected] !== undefined, `width=${state.meters[expected]}`);
+    check(
+      `${hz} Hz does not bleed into ${others.join('/')}`,
+      top > rest * 2.5,
+      `${expected}=${top.toFixed(3)} vs next=${rest.toFixed(3)}`
+    );
+    check(
+      `${hz} Hz meter tracks the band`,
+      state.meters[expected] !== '0%' && state.meters[expected] !== undefined,
+      `width=${state.meters[expected]}`
+    );
     check(`${hz} Hz raises no page errors`, errors.length === 0, errors[0] || 'clean');
   });
 }
 
 async function beatTest() {
   console.log('\n120 BPM kick pattern → expecting BPM readout near 120');
-  await withAudio('kick-120bpm.wav', async (page, errors) => {
-    // BPM needs several confirmed intervals before it means anything.
-    await page.waitForTimeout(5000);
+  await withAudio(
+    'kick-120bpm.wav',
+    async (page, errors) => {
+      // BPM needs several confirmed intervals before it means anything.
+      await page.waitForTimeout(5000);
 
-    const state = await read(page);
-    const shown = await page.textContent('#bpmCounter');
-    const beats = await page.evaluate(() => window.__beatCount ?? null);
+      const state = await read(page);
+      const shown = await page.textContent('#bpmCounter');
+      const beats = await page.evaluate(() => window.__beatCount ?? null);
 
-    console.log(`        detected=${state.bpm} readout=${shown} bass=${state.bass.toFixed(3)}`);
+      console.log(`        detected=${state.bpm} readout=${shown} bass=${state.bass.toFixed(3)}`);
 
-    check('BPM is detected at all', state.bpm > 0, `bpm=${state.bpm}`);
-    check('BPM lands within 8 of 120', Math.abs(state.bpm - 120) <= 8, `bpm=${state.bpm}`);
-    check('BPM readout matches the engine', shown.trim() === String(state.bpm),
-      `readout="${shown.trim()}"`);
-    check('kick drives the beat envelope',
-      typeof beats === 'number' ? beats > 4 : true, `beats=${beats}`);
-    check('beat pass raises no page errors', errors.length === 0, errors[0] || 'clean');
-  }, async (page) => {
-    // Count real beat events at the seam where the app wires them, so this
-    // measures the event the stage actually consumes.
-    await page.evaluate(() => {
-      window.__beatCount = 0;
-      const original = djApp.audioProcessor.onBeat;
-      djApp.audioProcessor.onBeat = (t) => { window.__beatCount++; original(t); };
-    });
-  });
+      check('BPM is detected at all', state.bpm > 0, `bpm=${state.bpm}`);
+      check('BPM lands within 8 of 120', Math.abs(state.bpm - 120) <= 8, `bpm=${state.bpm}`);
+      check(
+        'BPM readout matches the engine',
+        shown.trim() === String(state.bpm),
+        `readout="${shown.trim()}"`
+      );
+      check(
+        'kick drives the beat envelope',
+        typeof beats === 'number' ? beats > 4 : true,
+        `beats=${beats}`
+      );
+      check('beat pass raises no page errors', errors.length === 0, errors[0] || 'clean');
+    },
+    async (page) => {
+      // Count real beat events at the seam where the app wires them, so this
+      // measures the event the stage actually consumes.
+      await page.evaluate(() => {
+        window.__beatCount = 0;
+        const original = djApp.audioProcessor.onBeat;
+        djApp.audioProcessor.onBeat = (t) => {
+          window.__beatCount++;
+          original(t);
+        };
+      });
+    }
+  );
 }
 
 // Tempo accuracy across the range, and specifically the octave behaviour.
@@ -172,8 +201,11 @@ async function tempoTest(wav, bpm) {
     const off = Math.abs(state.bpm - bpm);
     console.log(`        detected=${state.bpm} (off by ${off})`);
     check(`${bpm} BPM detected within 6`, off <= 6, `detected ${state.bpm}`);
-    check(`${bpm} BPM not octave-shifted`, state.bpm < bpm * 1.5 && state.bpm > bpm * 0.6,
-      `detected ${state.bpm}`);
+    check(
+      `${bpm} BPM not octave-shifted`,
+      state.bpm < bpm * 1.5 && state.bpm > bpm * 0.6,
+      `detected ${state.bpm}`
+    );
     check(`${bpm} BPM pass raises no page errors`, errors.length === 0, errors[0] || 'clean');
   });
 }
@@ -183,8 +215,9 @@ async function modeTest() {
   await mkdir(OUT, { recursive: true });
 
   await withAudio('kick-120bpm.wav', async (page, errors) => {
-    const modes = await page.$$eval('#visualMode option', opts =>
-      opts.map(o => ({ value: o.value, label: o.textContent.trim() })));
+    const modes = await page.$$eval('#visualMode option', (opts) =>
+      opts.map((o) => ({ value: o.value, label: o.textContent.trim() }))
+    );
 
     check('ten modes are offered', modes.length === 10, `${modes.length} found`);
 
@@ -204,7 +237,8 @@ async function modeTest() {
           return lit;
         };
 
-        let lit = 0, total = 0;
+        let lit = 0,
+          total = 0;
 
         const canvas = document.querySelector('#p5-canvas canvas');
         if (!canvas) return { ok: false, reason: 'no canvas' };
@@ -231,13 +265,20 @@ async function modeTest() {
       const fresh = errors.slice(before);
       // Custom Upload has nothing loaded, so it draws only the drop target.
       const floor = mode.value === 'custom' ? 0.0002 : 0.001;
-      check(`${mode.label} paints`, painted.ok && painted.ratio > floor,
-        painted.ok ? `${(painted.ratio * 100).toFixed(2)}% of pixels lit` : painted.reason);
+      check(
+        `${mode.label} paints`,
+        painted.ok && painted.ratio > floor,
+        painted.ok ? `${(painted.ratio * 100).toFixed(2)}% of pixels lit` : painted.reason
+      );
       check(`${mode.label} runs clean`, fresh.length === 0, fresh[0] || 'no errors');
     }
 
     const fps = await page.textContent('#fpsCounter');
-    check('frame rate is reported', fps.trim() !== '—', `${fps.trim()} fps (SwiftShader, not indicative)`);
+    check(
+      'frame rate is reported',
+      fps.trim() !== '—',
+      `${fps.trim()} fps (SwiftShader, not indicative)`
+    );
   });
 }
 
@@ -253,7 +294,7 @@ async function silenceTest() {
       mid: document.querySelector('.mid-fill').style.width,
       high: document.querySelector('.high-fill').style.width
     }));
-    const zeroed = Object.values(meters).every(v => v === '0%');
+    const zeroed = Object.values(meters).every((v) => v === '0%');
     check('meters return to zero when stopped', zeroed, JSON.stringify(meters));
   });
 }
@@ -282,12 +323,19 @@ const OBSERVED_LABELS = [
  * other machine reports, so suffix-matching would misclassify it. It is caught
  * by the "macbook" keyword instead, which is why that keyword has to stay.
  */
-const CONTROLLER_LABELS = ['DDJ-REV1', '\u{1F32D}air\u{1F32D} Microphone', 'MacBook Pro Microphone'];
+const CONTROLLER_LABELS = [
+  'DDJ-REV1',
+  '\u{1F32D}air\u{1F32D} Microphone',
+  'MacBook Pro Microphone'
+];
 
 async function withPage(run) {
   const browser = await chromium.launch({
-    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
-           '--enable-unsafe-swiftshader']
+    args: [
+      '--use-fake-ui-for-media-stream',
+      '--use-fake-device-for-media-stream',
+      '--enable-unsafe-swiftshader'
+    ]
   });
   const page = await browser.newPage();
   await page.goto(BASE, { waitUntil: 'load' });
@@ -302,45 +350,72 @@ async function withPage(run) {
 async function deviceTest() {
   console.log('\nDevice classification → a loopback is never the controller');
   await withPage(async (page) => {
-    const classify = (labels) => page.evaluate((ls) => ls.map(label => ({
-      label,
-      rank: djApp.audioProcessor.deviceRank(label),
-      isDJ: djApp.audioProcessor.isDJDevice(label),
-      isVirtual: djApp.audioProcessor.isVirtualDevice(label)
-    })).sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)), labels);
+    const classify = (labels) =>
+      page.evaluate(
+        (ls) =>
+          ls
+            .map((label) => ({
+              label,
+              rank: djApp.audioProcessor.deviceRank(label),
+              isDJ: djApp.audioProcessor.isDJDevice(label),
+              isVirtual: djApp.audioProcessor.isVirtualDevice(label)
+            }))
+            .sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)),
+        labels
+      );
 
     // --- Controller absent: the state you are in at load-in ---
     const absent = await classify(OBSERVED_LABELS);
 
-    const djVirtual = absent.filter(d => d.isVirtual && d.isDJ);
-    check('no virtual device is classified as DJ hardware',
-      djVirtual.length === 0, djVirtual.map(d => d.label).join(', ') || 'none');
+    const djVirtual = absent.filter((d) => d.isVirtual && d.isDJ);
+    check(
+      'no virtual device is classified as DJ hardware',
+      djVirtual.length === 0,
+      djVirtual.map((d) => d.label).join(', ') || 'none'
+    );
 
-    const serato = absent.find(d => d.label.startsWith('Serato'));
-    check('Serato Virtual Audio is not prefixed "DJ ·"',
-      serato && !serato.isDJ, `isDJ=${serato && serato.isDJ}`);
+    const serato = absent.find((d) => d.label.startsWith('Serato'));
+    check(
+      'Serato Virtual Audio is not prefixed "DJ ·"',
+      serato && !serato.isDJ,
+      `isDJ=${serato && serato.isDJ}`
+    );
 
-    const worstPhysical = Math.max(...absent.filter(d => !d.isVirtual).map(d => d.rank));
-    const bestVirtual = Math.min(...absent.filter(d => d.isVirtual).map(d => d.rank));
-    check('every physical input outranks every virtual device',
-      worstPhysical < bestVirtual, `physical<=${worstPhysical} virtual>=${bestVirtual}`);
+    const worstPhysical = Math.max(...absent.filter((d) => !d.isVirtual).map((d) => d.rank));
+    const bestVirtual = Math.min(...absent.filter((d) => d.isVirtual).map((d) => d.rank));
+    check(
+      'every physical input outranks every virtual device',
+      worstPhysical < bestVirtual,
+      `physical<=${worstPhysical} virtual>=${bestVirtual}`
+    );
 
-    check('auto-selection falls back to a physical input, not a loopback',
-      !absent[0].isVirtual, `selected ${absent[0].label}`);
+    check(
+      'auto-selection falls back to a physical input, not a loopback',
+      !absent[0].isVirtual,
+      `selected ${absent[0].label}`
+    );
 
     // --- Controller present: the fix must not cost us the happy path ---
     const present = await classify([...OBSERVED_LABELS, ...CONTROLLER_LABELS]);
-    check('the DDJ-REV1 still sorts first when connected',
-      present[0].label === 'DDJ-REV1' && present[0].isDJ, `selected ${present[0].label}`);
-    check('the DDJ-REV1 outranks every virtual device on the same machine',
-      present.filter(d => d.isVirtual).every(d => d.rank > present[0].rank),
-      `controller=${present[0].rank}`);
+    check(
+      'the DDJ-REV1 still sorts first when connected',
+      present[0].label === 'DDJ-REV1' && present[0].isDJ,
+      `selected ${present[0].label}`
+    );
+    check(
+      'the DDJ-REV1 outranks every virtual device on the same machine',
+      present.filter((d) => d.isVirtual).every((d) => d.rank > present[0].rank),
+      `controller=${present[0].rank}`
+    );
 
     // The suffix-less built-in is a real label, not a hypothetical: the two
     // machines on this project report their internal microphone differently.
-    const bare = present.find(d => d.label === 'MacBook Pro Microphone');
-    check('a built-in mic without the "(Built-in)" suffix is still built-in',
-      bare && !bare.isDJ && !bare.isVirtual && bare.rank === 5, `rank=${bare && bare.rank}`);
+    const bare = present.find((d) => d.label === 'MacBook Pro Microphone');
+    check(
+      'a built-in mic without the "(Built-in)" suffix is still built-in',
+      bare && !bare.isDJ && !bare.isVirtual && bare.rank === 5,
+      `rank=${bare && bare.rank}`
+    );
 
     // --- One question, one answer ---
     const drift = await page.evaluate(() => {
@@ -348,21 +423,33 @@ async function deviceTest() {
       // isDJDevice() must be exactly "deviceRank() reached a DJ tier", and
       // findDJInput() must agree with it on the same list. If any of the three
       // disagrees, the duplication PHI-172 removed has grown back.
-      const labels = ['DDJ-REV1', 'Serato Virtual Audio (Virtual)', 'MacBook Pro Microphone (Built-in)'];
-      const inputs = labels.map(label => {
-        const rank = p.deviceRank(label);
-        return { label, deviceId: label, rank, isDJ: p.isDJDevice(label) };
-      }).sort((a, b) => a.rank - b.rank);
+      const labels = [
+        'DDJ-REV1',
+        'Serato Virtual Audio (Virtual)',
+        'MacBook Pro Microphone (Built-in)'
+      ];
+      const inputs = labels
+        .map((label) => {
+          const rank = p.deviceRank(label);
+          return { label, deviceId: label, rank, isDJ: p.isDJDevice(label) };
+        })
+        .sort((a, b) => a.rank - b.rank);
       const found = p.findDJInput(inputs);
       return {
-        mismatched: inputs.filter(d => d.isDJ !== (d.rank <= 3)).map(d => d.label),
+        mismatched: inputs.filter((d) => d.isDJ !== d.rank <= 3).map((d) => d.label),
         found: found && found.label
       };
     });
-    check('isDJDevice() and deviceRank() cannot disagree',
-      drift.mismatched.length === 0, drift.mismatched.join(', ') || 'consistent');
-    check('findDJInput() returns the top-ranked DJ device',
-      drift.found === 'DDJ-REV1', `got ${drift.found}`);
+    check(
+      'isDJDevice() and deviceRank() cannot disagree',
+      drift.mismatched.length === 0,
+      drift.mismatched.join(', ') || 'consistent'
+    );
+    check(
+      'findDJInput() returns the top-ranked DJ device',
+      drift.found === 'DDJ-REV1',
+      `got ${drift.found}`
+    );
   });
 }
 
@@ -390,7 +477,7 @@ try {
   server.close();
 }
 
-const failed = results.filter(r => !r.passed);
+const failed = results.filter((r) => !r.passed);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 await writeFile(join(OUT, 'results.json'), JSON.stringify(results, null, 2)).catch(() => {});
 if (failed.length) {

@@ -47,7 +47,7 @@ class DJVisualizer {
     // decayed on wall time, so it behaves the same at 30fps and 144fps.
     this.beat = 0;
     this.beatDecay = 0.34; // seconds to near-zero
-    this.phase = 0;        // beat phase, 0..1, re-anchored on every beat
+    this.phase = 0; // beat phase, 0..1, re-anchored on every beat
     this.beatPeriod = 0.5; // seconds per beat; 120 BPM until told otherwise
 
     // Multiplier on every flash and pulse consumer. Photosensitivity is a
@@ -83,9 +83,9 @@ class DJVisualizer {
     this.readPalette();
 
     // Frequency band displays in the rail
-    this.bassFill = document.querySelector(".bass-fill");
-    this.midFill = document.querySelector(".mid-fill");
-    this.highFill = document.querySelector(".high-fill");
+    this.bassFill = document.querySelector('.bass-fill');
+    this.midFill = document.querySelector('.mid-fill');
+    this.highFill = document.querySelector('.high-fill');
 
     this.visualModeSelect = document.getElementById('visualMode');
     this.visualModeSelect.addEventListener('change', (e) => {
@@ -168,8 +168,8 @@ class DJVisualizer {
     }
     const rgb = text.match(/^rgba?\(([^)]+)\)$/i);
     if (rgb) {
-      const parts = rgb[1].split(',').map(v => parseFloat(v));
-      if (parts.length >= 3 && parts.every(v => !isNaN(v))) return parts.slice(0, 3);
+      const parts = rgb[1].split(',').map((v) => parseFloat(v));
+      if (parts.length >= 3 && parts.every((v) => !isNaN(v))) return parts.slice(0, 3);
     }
     return null;
   }
@@ -315,7 +315,11 @@ class DJVisualizer {
   // then middle, then tight and bright — turn a 2px stroke into something with
   // a core and a halo. It is the cheapest thing that reads as light instead of
   // ink, and it needs no shader, which the zero-build constraint forbids.
-  static GLOW = [[4.0, 0.10], [2.1, 0.22], [1.0, 1.0]];
+  static GLOW = [
+    [4.0, 0.1],
+    [2.1, 0.22],
+    [1.0, 1.0]
+  ];
 
   emissiveStroke(p, rgb, alpha, weight, shape) {
     p.noFill();
@@ -370,17 +374,38 @@ class DJVisualizer {
     if (additive) p.blendMode(p.ADD);
 
     switch (this.currentMode) {
-      case 'spectrum': this.drawSpectrum(p); break;
-      case 'particles': this.drawParticleField(p); break;
-      case 'rings': this.drawFrequencyRings(p); break;
-      case 'waves': this.drawWaveforms(p); break;
-      case 'mandala': this.drawMandala(p); break;
-      case 'tunnel': this.drawTunnel(p); break;
-      case 'galaxy': this.drawGalaxy(p); break;
-      case 'flow': this.drawFlow(p); break;
-      case 'polygons': this.drawPolygonCollage(); break;
-      case 'custom': this.drawCustomMedia(p); break;
-      default: this.drawParticleField(p);
+      case 'spectrum':
+        this.drawSpectrum(p);
+        break;
+      case 'particles':
+        this.drawParticleField(p);
+        break;
+      case 'rings':
+        this.drawFrequencyRings(p);
+        break;
+      case 'waves':
+        this.drawWaveforms(p);
+        break;
+      case 'mandala':
+        this.drawMandala(p);
+        break;
+      case 'tunnel':
+        this.drawTunnel(p);
+        break;
+      case 'galaxy':
+        this.drawGalaxy(p);
+        break;
+      case 'flow':
+        this.drawFlow(p);
+        break;
+      case 'polygons':
+        this.drawPolygonCollage();
+        break;
+      case 'custom':
+        this.drawCustomMedia(p);
+        break;
+      default:
+        this.drawParticleField(p);
     }
 
     if (additive) p.blendMode(p.BLEND);
@@ -432,7 +457,8 @@ class DJVisualizer {
     if (!spec || spec.length === 0 || !binHz) return;
 
     const COUNT = 88;
-    const F_MIN = 20, F_MAX = 20000;
+    const F_MIN = 20,
+      F_MAX = 20000;
     const ratio = Math.pow(F_MAX / F_MIN, 1 / COUNT);
 
     const width = this.vw * 0.9;
@@ -470,7 +496,7 @@ class DJVisualizer {
       p.noStroke();
       for (const [ws, as] of DJVisualizer.GLOW) {
         p.fill(rgb[0], rgb[1], rgb[2], (70 + lit * 170) * as);
-        p.rect(-barW * ws / 2, -barH / 2, barW * ws, barH, barW / 2);
+        p.rect((-barW * ws) / 2, -barH / 2, barW * ws, barH, barW / 2);
       }
       p.pop();
 
@@ -488,7 +514,9 @@ class DJVisualizer {
    * circles rather than lit spheres — 36 spheres was two thousand quads a frame
    * for a shape the camera can only ever see as a disc. */
   drawParticleField(p) {
-    const bass = this.band('bass'), mid = this.band('mid'), high = this.band('high');
+    const bass = this.band('bass'),
+      mid = this.band('mid'),
+      high = this.band('high');
     const drift = 0.4 + this.beat * 0.8;
 
     for (const particle of this.particles) {
@@ -496,7 +524,8 @@ class DJVisualizer {
       particle.y += particle.vy * (1 + mid * 5) * drift;
       particle.z += particle.vz * (1 + high * 7) * drift;
 
-      const halfW = this.vw / 2, halfH = this.vh / 2;
+      const halfW = this.vw / 2,
+        halfH = this.vh / 2;
       if (particle.x > halfW) particle.x = -halfW;
       if (particle.x < -halfW) particle.x = halfW;
       if (particle.y > halfH) particle.y = -halfH;
@@ -577,9 +606,11 @@ class DJVisualizer {
       const lit = this.band(row.name);
       const rgb = this.colors[row.name];
       const amp = lit * this.vh * 0.2;
-      const bounds = (typeof BANDS !== 'undefined' && BANDS.find(b => b.name === row.name)) || null;
+      const bounds =
+        (typeof BANDS !== 'undefined' && BANDS.find((b) => b.name === row.name)) || null;
 
-      let first = 1, last = 1;
+      let first = 1,
+        last = 1;
       if (bounds && binHz && spec && spec.length) {
         first = Math.max(1, Math.round(bounds.from / binHz));
         last = Math.min(spec.length - 1, Math.round(bounds.to / binHz));
@@ -638,8 +669,9 @@ class DJVisualizer {
         // Struck spokes: every fourth one extends on the beat, which gives the
         // figure an accent instead of a uniform pulse.
         const struck = i % 4 === 0 ? this.beat * radius * 0.18 : 0;
-        this.emissiveStroke(p, rgb, alpha, 1.2 + lit * 2.4,
-          () => p.line(inner, 0, outer + struck, 0));
+        this.emissiveStroke(p, rgb, alpha, 1.2 + lit * 2.4, () =>
+          p.line(inner, 0, outer + struck, 0)
+        );
         p.pop();
       }
       p.pop();
@@ -720,9 +752,12 @@ class DJVisualizer {
     // A core that answers the kick. One element carrying the whole low end is
     // the composition's anchor; without it the spiral has no centre of gravity.
     const core = this.band('bass');
-    this.emissiveDot(p, this.colors.bass,
+    this.emissiveDot(
+      p,
+      this.colors.bass,
       70 + core * 150 + this.beat * 40,
-      reach * (0.06 + core * 0.09));
+      reach * (0.06 + core * 0.09)
+    );
   }
 
   /* Flow — the three bands as one weather system.
@@ -771,10 +806,17 @@ class DJVisualizer {
           for (let i = 0; i <= STEPS; i++) {
             const t = i / STEPS;
             const along = path.reverse ? 1 - t : t;
-            const x = (along - 0.5) * this.vw +
+            const x =
+              (along - 0.5) * this.vw +
               Math.sin(this.time * path.rate + offset + t * 5) * lit * this.vw * 0.05;
-            const y = path.from + (path.to - path.from) * t +
-              Math.cos(this.time * path.rate * 0.7 + offset + t * 4) * lit * this.vh * path.sway * 0.2;
+            const y =
+              path.from +
+              (path.to - path.from) * t +
+              Math.cos(this.time * path.rate * 0.7 + offset + t * 4) *
+                lit *
+                this.vh *
+                path.sway *
+                0.2;
             p.vertex(x, y);
           }
           p.endShape();
@@ -831,16 +873,22 @@ class DJVisualizer {
         const baseY = rows[name] - layer * this.vh * 0.035;
         const amp = lit * this.vh * 0.11;
 
-        this.emissiveStroke(p, this.colors[name], (45 + lit * 120) * (1 - layer * 0.3), 1.1 + lit * 1.6, () => {
-          p.beginShape();
-          for (let i = 0; i < POINTS; i++) {
-            const x = ((i / (POINTS - 1)) - 0.5) * this.vw;
-            const wave = Math.sin(i * 0.25 + this.time * 2.5 + phase) * amp;
-            const flow = Math.cos(i * 0.18 + this.time * 3.2) * amp * 0.35;
-            p.vertex(x, baseY + wave + flow);
+        this.emissiveStroke(
+          p,
+          this.colors[name],
+          (45 + lit * 120) * (1 - layer * 0.3),
+          1.1 + lit * 1.6,
+          () => {
+            p.beginShape();
+            for (let i = 0; i < POINTS; i++) {
+              const x = (i / (POINTS - 1) - 0.5) * this.vw;
+              const wave = Math.sin(i * 0.25 + this.time * 2.5 + phase) * amp;
+              const flow = Math.cos(i * 0.18 + this.time * 3.2) * amp * 0.35;
+              p.vertex(x, baseY + wave + flow);
+            }
+            p.endShape();
           }
-          p.endShape();
-        });
+        );
       }
     }
   }
@@ -864,7 +912,9 @@ class DJVisualizer {
     // Paint stays clear of the rail like every other mode's composition does.
     const height = this.collageCanvas.height - this.railH;
 
-    const bass = this.band('bass'), mid = this.band('mid'), high = this.band('high');
+    const bass = this.band('bass'),
+      mid = this.band('mid'),
+      high = this.band('high');
     if (bass + mid + high <= 0.06) return;
 
     // Sample at a musical rate rather than a frame count, so a faster track
@@ -884,22 +934,26 @@ class DJVisualizer {
 
     const zones = [
       { name: 'bass', lit: bass, y: height * 0.74, spread: height * 0.18 },
-      { name: 'mid', lit: mid, y: height * 0.50, spread: height * 0.15 },
+      { name: 'mid', lit: mid, y: height * 0.5, spread: height * 0.15 },
       { name: 'high', lit: high, y: height * 0.26, spread: height * 0.17 }
     ];
 
     const spin = this.phase * Math.PI * 2;
     for (const zone of zones) {
       if (zone.lit < 0.05) continue;
-      this.paintCollageShape(ctx, {
-        name: zone.name,
-        lit: zone.lit,
-        points: 3 + Math.round(zone.lit * 3),
-        cx: width * 0.5 + Math.cos(spin * 1.3 + zone.y * 0.01) * width * 0.26,
-        cy: zone.y + Math.sin(spin * 2) * zone.spread,
-        radius: zone.lit * Math.min(width, height) * 0.28 * (1 + this.beat * 0.4),
-        rotation: spin + Math.random() * 0.7
-      }, { bass, mid, high });
+      this.paintCollageShape(
+        ctx,
+        {
+          name: zone.name,
+          lit: zone.lit,
+          points: 3 + Math.round(zone.lit * 3),
+          cx: width * 0.5 + Math.cos(spin * 1.3 + zone.y * 0.01) * width * 0.26,
+          cy: zone.y + Math.sin(spin * 2) * zone.spread,
+          radius: zone.lit * Math.min(width, height) * 0.28 * (1 + this.beat * 0.4),
+          rotation: spin + Math.random() * 0.7
+        },
+        { bass, mid, high }
+      );
     }
   }
 
@@ -911,10 +965,12 @@ class DJVisualizer {
     // meetup demo ends on.
     const total = levels.bass + levels.mid + levels.high || 1;
     const own = this.colors[shape.name];
-    const mixed = [0, 1, 2].map(channel =>
-      (this.colors.bass[channel] * levels.bass +
-       this.colors.mid[channel] * levels.mid +
-       this.colors.high[channel] * levels.high) / total
+    const mixed = [0, 1, 2].map(
+      (channel) =>
+        (this.colors.bass[channel] * levels.bass +
+          this.colors.mid[channel] * levels.mid +
+          this.colors.high[channel] * levels.high) /
+        total
     );
     // Two thirds its own band, one third the room. Keeps a shape identifiable
     // as bass or high while still recording what else was playing under it.
@@ -1056,7 +1112,8 @@ class DJVisualizer {
           if (this.customMediaStatus) this.customMediaStatus.textContent = `Loaded: ${file.name}`;
         },
         () => {
-          if (this.customMediaStatus) this.customMediaStatus.textContent = `Failed to load: ${file.name}`;
+          if (this.customMediaStatus)
+            this.customMediaStatus.textContent = `Failed to load: ${file.name}`;
           URL.revokeObjectURL(url);
           this.customMediaURL = null;
         }

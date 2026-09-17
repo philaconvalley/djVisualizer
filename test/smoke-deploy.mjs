@@ -21,8 +21,11 @@
  *   node test/smoke-deploy.mjs https://some-preview   # a deploy preview
  */
 
-const BASE = (process.argv[2] || process.env.SMOKE_URL || 'https://dj-visualizer.netlify.app')
-  .replace(/\/$/, '');
+const BASE = (
+  process.argv[2] ||
+  process.env.SMOKE_URL ||
+  'https://dj-visualizer.netlify.app'
+).replace(/\/$/, '');
 const TIMEOUT = 20000;
 
 const results = [];
@@ -52,8 +55,11 @@ console.log(`Smoke-testing ${BASE}\n`);
 const page = await get('/');
 check('page returns 200', page.status === 200, page.error || `status ${page.status}`);
 check('page is HTML', /text\/html/i.test(page.type), page.type || 'no content-type');
-check('page is the visualizer', page.body.includes('id="p5-canvas"'),
-  page.body.includes('<title>') ? page.body.match(/<title>([^<]*)</)?.[1] : 'no title');
+check(
+  'page is the visualizer',
+  page.body.includes('id="p5-canvas"'),
+  page.body.includes('<title>') ? page.body.match(/<title>([^<]*)</)?.[1] : 'no title'
+);
 
 if (page.status !== 200) {
   console.log('\nPage did not load; skipping asset checks.');
@@ -64,9 +70,13 @@ if (page.status !== 200) {
    hard-coded list — a list would go stale exactly when a new file is added,
    which is the circumstance that broke the deploy in the first place. */
 const assets = [
-  ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m => ({ path: m[1], kind: 'js' })),
-  ...[...page.body.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi)]
-    .map(m => ({ path: m[1], kind: 'css' }))
+  ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => ({
+    path: m[1],
+    kind: 'js'
+  })),
+  ...[...page.body.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi)].map(
+    (m) => ({ path: m[1], kind: 'css' })
+  )
 ];
 
 check('page references assets', assets.length > 0, `${assets.length} found`);
@@ -87,11 +97,17 @@ for (const asset of assets) {
   // missing asset with index.html and a 200, so status alone looks healthy
   // while the browser gets HTML where it wanted a script.
   const isHtml = /^\s*<(!doctype|html)/i.test(res.body);
-  check(`${href} is not an HTML fallback`, !isHtml,
-    isHtml ? 'served index.html — asset is missing from the deploy' : 'real content');
+  check(
+    `${href} is not an HTML fallback`,
+    !isHtml,
+    isHtml ? 'served index.html — asset is missing from the deploy' : 'real content'
+  );
 
-  check(`${href} is served as ${expect.label}`, expect.pattern.test(res.type),
-    res.type || 'no content-type');
+  check(
+    `${href} is served as ${expect.label}`,
+    expect.pattern.test(res.type),
+    res.type || 'no content-type'
+  );
   check(`${href} is not empty`, res.body.length > 200, `${res.body.length} bytes`);
 }
 
@@ -99,10 +115,13 @@ for (const asset of assets) {
    rewriting everything to the page, which is what disguises a missing asset as
    a working one. */
 const missing = await get('/this-path-should-not-exist-smoke-check.js');
-check('missing paths 404 rather than returning the page', missing.status === 404,
-  `status ${missing.status}`);
+check(
+  'missing paths 404 rather than returning the page',
+  missing.status === 404,
+  `status ${missing.status}`
+);
 
-const failed = results.filter(r => !r.passed);
+const failed = results.filter((r) => !r.passed);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (failed.length) {
   console.log('\nFailures:');

@@ -25,13 +25,13 @@ function writeWav(name, samples) {
   header.writeUInt32LE(36 + data.length, 4);
   header.write('WAVE', 8);
   header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);          // PCM chunk size
-  header.writeUInt16LE(1, 20);           // PCM
-  header.writeUInt16LE(1, 22);           // mono
+  header.writeUInt32LE(16, 16); // PCM chunk size
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
   header.writeUInt32LE(RATE, 24);
-  header.writeUInt32LE(RATE * 2, 28);    // byte rate
-  header.writeUInt16LE(2, 32);           // block align
-  header.writeUInt16LE(16, 34);          // bits per sample
+  header.writeUInt32LE(RATE * 2, 28); // byte rate
+  header.writeUInt16LE(2, 32); // block align
+  header.writeUInt16LE(16, 34); // bits per sample
   header.write('data', 36);
   header.writeUInt32LE(data.length, 40);
 
@@ -83,7 +83,7 @@ function kickPattern(bpm, seconds) {
 function kickWithSyncopatedBass(bpm, seconds, bassAmp = 0.5) {
   const out = new Float32Array(Math.round(RATE * seconds));
   const beat = (60 / bpm) * RATE;
-  const dotted = beat * 0.75;          // three sixteenths
+  const dotted = beat * 0.75; // three sixteenths
   const decay = 0.09;
 
   for (let i = 0; i < out.length; i++) {
@@ -93,7 +93,8 @@ function kickWithSyncopatedBass(bpm, seconds, bassAmp = 0.5) {
     // 90 Hz so it lands in the same band the kick does and the envelope
     // follower cannot separate them by frequency.
     const intoBass = (i % Math.round(dotted)) / RATE;
-    const bass = Math.sin(2 * Math.PI * 90 * intoBass) * Math.exp(-intoBass / decay) * 0.85 * bassAmp;
+    const bass =
+      Math.sin(2 * Math.PI * 90 * intoBass) * Math.exp(-intoBass / decay) * 0.85 * bassAmp;
 
     out[i] = kick + bass + (Math.random() - 0.5) * 0.015;
   }
@@ -123,8 +124,8 @@ function broadbandMix(bpm, seconds) {
     for (const hz of chord) mid += Math.sin((2 * Math.PI * hz * shift * i) / RATE);
     mid *= 0.07 * (0.55 + 0.45 * Math.exp(-intoEighth / 0.18));
 
-    const hat = (Math.random() - 0.5) * Math.exp(-intoEighth / 0.03) * 0.5 +
-      (Math.random() - 0.5) * 0.06;
+    const hat =
+      (Math.random() - 0.5) * Math.exp(-intoEighth / 0.03) * 0.5 + (Math.random() - 0.5) * 0.06;
     out[i] = kick + mid + hat;
   }
   return out;
@@ -132,9 +133,9 @@ function broadbandMix(bpm, seconds) {
 
 mkdirSync(HERE, { recursive: true });
 
-writeWav('tone-100hz.wav', tone(100, 6));    // squarely inside 20–250
-writeWav('tone-1khz.wav', tone(1000, 6));    // squarely inside 250–4k
-writeWav('tone-10khz.wav', tone(10000, 6));  // squarely inside 4k–20k
+writeWav('tone-100hz.wav', tone(100, 6)); // squarely inside 20–250
+writeWav('tone-1khz.wav', tone(1000, 6)); // squarely inside 250–4k
+writeWav('tone-10khz.wav', tone(10000, 6)); // squarely inside 4k–20k
 writeWav('kick-120bpm.wav', kickPattern(120, 12));
 
 // Three tempos with a right answer, chosen to pin the octave behaviour. 85 is

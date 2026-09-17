@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DJ Visualizer</title>
-    <link rel="stylesheet" href="styles/styles.css">
+    <link rel="stylesheet" href="styles/styles.css" />
     <!-- Vendored, not CDN. The venue network is assumed hostile; nothing may be
          fetched at showtime. Pinned to p5 1.9.0 — update deliberately. -->
     <script src="vendor/p5.min.js"></script>
@@ -30,7 +30,9 @@
       <div id="p5-canvas"></div>
       <p class="stage-hint" id="stageHint">
         Press Start to read the room
-        <span class="stage-warn">Flashing imagery &mdash; use Reduce flashing if that is a concern</span>
+        <span class="stage-warn"
+          >Flashing imagery &mdash; use Reduce flashing if that is a concern</span
+        >
       </p>
     </main>
 
@@ -59,8 +61,16 @@
         <div class="band" data-band="bass">
           <div class="band-track">
             <div class="band-fill bass-fill" aria-hidden="true"></div>
-            <input type="range" id="bassGain" class="band-input"
-                   min="0.1" max="3" step="0.1" value="1" aria-label="Bass sensitivity">
+            <input
+              type="range"
+              id="bassGain"
+              class="band-input"
+              min="0.1"
+              max="3"
+              step="0.1"
+              value="1"
+              aria-label="Bass sensitivity"
+            />
           </div>
           <div class="band-meta">
             <span class="band-name">Bass</span>
@@ -72,8 +82,16 @@
         <div class="band" data-band="mid">
           <div class="band-track">
             <div class="band-fill mid-fill" aria-hidden="true"></div>
-            <input type="range" id="midGain" class="band-input"
-                   min="0.1" max="3" step="0.1" value="1" aria-label="Mid sensitivity">
+            <input
+              type="range"
+              id="midGain"
+              class="band-input"
+              min="0.1"
+              max="3"
+              step="0.1"
+              value="1"
+              aria-label="Mid sensitivity"
+            />
           </div>
           <div class="band-meta">
             <span class="band-name">Mid</span>
@@ -85,8 +103,16 @@
         <div class="band" data-band="high">
           <div class="band-track">
             <div class="band-fill high-fill" aria-hidden="true"></div>
-            <input type="range" id="highGain" class="band-input"
-                   min="0.1" max="3" step="0.1" value="1" aria-label="High sensitivity">
+            <input
+              type="range"
+              id="highGain"
+              class="band-input"
+              min="0.1"
+              max="3"
+              step="0.1"
+              value="1"
+              aria-label="High sensitivity"
+            />
           </div>
           <div class="band-meta">
             <span class="band-name">High</span>
@@ -127,50 +153,94 @@
         </div>
 
         <label class="toggle" title="Reduce large flashing changes in the visuals">
-          <input type="checkbox" id="reduceFlash">
+          <input type="checkbox" id="reduceFlash" />
           <span>Reduce flash</span>
         </label>
 
         <button id="fullscreen" class="ghost" type="button">Fullscreen</button>
-        <button id="helpToggle" class="ghost" type="button"
-                aria-haspopup="dialog" aria-label="Keyboard controls and performance notes">?</button>
+        <button
+          id="helpToggle"
+          class="ghost"
+          type="button"
+          aria-haspopup="dialog"
+          aria-label="Keyboard controls and performance notes"
+        >
+          ?
+        </button>
       </section>
 
       <section class="console-group console-group--media" id="customMediaSection" hidden>
         <label class="field">
           <span class="field-label">Image, GIF or video</span>
-          <input type="file" id="customMediaUpload" class="field-file" accept="image/*,video/*">
+          <input type="file" id="customMediaUpload" class="field-file" accept="image/*,video/*" />
         </label>
         <span id="customMediaStatus" class="custom-media-status">No file selected</span>
       </section>
     </div>
 
-    <div id="helpOverlay" class="help-overlay" role="dialog" aria-modal="true"
-         aria-labelledby="helpTitle">
+    <div
+      id="helpOverlay"
+      class="help-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="helpTitle"
+    >
       <div class="help-content">
         <div class="help-head">
           <h2 id="helpTitle">Controls</h2>
           <button id="helpClose" class="ghost" type="button">Close</button>
         </div>
         <dl class="help-keys">
-          <div><dt><kbd>Space</kbd></dt><dd>Start or stop audio</dd></div>
-          <div><dt><kbd>F</kbd></dt><dd>Toggle fullscreen</dd></div>
-          <div><dt><kbd>1</kbd>&ndash;<kbd>9</kbd>, <kbd>0</kbd></dt><dd>Switch visualization mode (0 selects the tenth)</dd></div>
-          <div><dt><kbd>R</kbd></dt><dd>Reset all sensitivities</dd></div>
-          <div><dt><kbd>?</kbd></dt><dd>Show or hide this panel</dd></div>
+          <div>
+            <dt><kbd>Space</kbd></dt>
+            <dd>Start or stop audio</dd>
+          </div>
+          <div>
+            <dt><kbd>F</kbd></dt>
+            <dd>Toggle fullscreen</dd>
+          </div>
+          <div>
+            <dt><kbd>1</kbd>&ndash;<kbd>9</kbd>, <kbd>0</kbd></dt>
+            <dd>Switch visualization mode (0 selects the tenth)</dd>
+          </div>
+          <div>
+            <dt><kbd>R</kbd></dt>
+            <dd>Reset all sensitivities</dd>
+          </div>
+          <div>
+            <dt><kbd>?</kbd></dt>
+            <dd>Show or hide this panel</dd>
+          </div>
         </dl>
         <h3>Frequency bands</h3>
         <dl class="help-keys">
-          <div><dt>Bass</dt><dd>20&ndash;250 Hz</dd></div>
-          <div><dt>Mid</dt><dd>250 Hz&ndash;4 kHz</dd></div>
-          <div><dt>High</dt><dd>4&ndash;20 kHz</dd></div>
+          <div>
+            <dt>Bass</dt>
+            <dd>20&ndash;250 Hz</dd>
+          </div>
+          <div>
+            <dt>Mid</dt>
+            <dd>250 Hz&ndash;4 kHz</dd>
+          </div>
+          <div>
+            <dt>High</dt>
+            <dd>4&ndash;20 kHz</dd>
+          </div>
         </dl>
 
         <h3>Performing</h3>
         <ul class="help-notes">
-          <li>Connect the controller by USB before starting; DJ hardware is detected and listed first.</li>
-          <li>Beat detection keys off the kick and reads the input directly, ahead of these sliders — the sensitivity controls change how the visuals respond, never what BPM reports.</li>
-          <li>This visualizer flashes in time with the music. Use the Reduce flashing control in the console to damp it; it turns itself on if your system asks for reduced motion.</li>
+          <li>
+            Connect the controller by USB before starting; DJ hardware is detected and listed first.
+          </li>
+          <li>
+            Beat detection keys off the kick and reads the input directly, ahead of these sliders —
+            the sensitivity controls change how the visuals respond, never what BPM reports.
+          </li>
+          <li>
+            This visualizer flashes in time with the music. Use the Reduce flashing control in the
+            console to damp it; it turns itself on if your system asks for reduced motion.
+          </li>
         </ul>
         <p class="help-close">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</p>
       </div>

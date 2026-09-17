@@ -7,9 +7,9 @@ const BANDS = [
   // `trim` is perceptual compensation, not band math. Music carries far less
   // energy per bin as frequency rises, so an untrimmed high band never moves.
   // Keep these separate from the bounds so the bounds stay auditable.
-  { name: 'bass', from: 20,   to: 250,   trim: 1.0 },
-  { name: 'mid',  from: 250,  to: 4000,  trim: 1.5 },
-  { name: 'high', from: 4000, to: 20000, trim: 2.4 },
+  { name: 'bass', from: 20, to: 250, trim: 1.0 },
+  { name: 'mid', from: 250, to: 4000, trim: 1.5 },
+  { name: 'high', from: 4000, to: 20000, trim: 2.4 }
 ];
 
 /* Input preference, lower being better. Every DJ tier is physical hardware by
@@ -21,12 +21,12 @@ const BANDS = [
  */
 const RANK = {
   DJ_DDJ_REV1: 0,
-  DJ_DDJ:      1,
-  DJ_PIONEER:  2,
-  DJ_OTHER:    3,
-  PHYSICAL:    4,
-  BUILT_IN:    5,
-  VIRTUAL:     6,
+  DJ_DDJ: 1,
+  DJ_PIONEER: 2,
+  DJ_OTHER: 3,
+  PHYSICAL: 4,
+  BUILT_IN: 5,
+  VIRTUAL: 6
 };
 
 /* Kick envelope follower, run on the audio thread.
@@ -83,14 +83,14 @@ class AudioProcessor {
     this.audioContext = null;
     this.sourceNode = null;
     this.analyserNode = null;
-    
+
     // Audio processing properties
     this.rms = 0;
     this.bass = 0;
     this.mid = 0;
     this.high = 0;
     this.spectrum = [];
-    
+
     // BPM detection properties
     this.bpm = 0;
     this.beatHistory = [];
@@ -103,10 +103,10 @@ class AudioProcessor {
     // ten beats, the mean converged onto the signal, and the ratio test below
     // stopped firing — the detector failed on exactly the machine that needed
     // it to work.
-    this.bassWindow = [];     // { t, v } pairs, t in ms
-    this.bassWindowMs = 700;  // long enough to span a bar's worth of kicks
-    this.beatRatio = 1.35;    // how far above the running mean counts as a kick
-    this.beatFloor = 0.012;   // below this the room is quiet, not grooving
+    this.bassWindow = []; // { t, v } pairs, t in ms
+    this.bassWindowMs = 700; // long enough to span a bar's worth of kicks
+    this.beatRatio = 1.35; // how far above the running mean counts as a kick
+    this.beatFloor = 0.012; // below this the room is quiet, not grooving
     this.lastBeatEnergy = 0;
     this.lastAnalysisAt = 0;
 
@@ -124,7 +124,7 @@ class AudioProcessor {
     // being counted twice — it is not a musical interval and must stay far
     // below one, which is exactly where the old 300 ms guard went wrong.
     this.onsetRefractoryMs = 90;
-    this.periodMs = 0;          // inferred beat period, unrounded
+    this.periodMs = 0; // inferred beat period, unrounded
 
     // Envelope samples posted by the worklet, drained on the main thread.
     this.envelopeQueue = [];
@@ -138,7 +138,7 @@ class AudioProcessor {
     this.dataArray = null;
     this.timeDataArray = null;
     this.isRunning = false;
-    
+
     // Callbacks
     this.onDataUpdate = null;
     // Discrete beat events. onDataUpdate carries continuous state only, and a
@@ -150,38 +150,41 @@ class AudioProcessor {
     try {
       // Request permission first with basic constraints to ensure we can see device labels
       const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
-      tmp.getTracks().forEach(t => t.stop());
-    } catch(e) {
+      tmp.getTracks().forEach((t) => t.stop());
+    } catch (e) {
       console.warn('Could not get initial audio permission:', e.message);
       // Continue anyway, some devices might still be available
     }
-    
+
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const allInputs = devices.filter(d => d.kind === 'audioinput');
-    
-    console.log('All detected audio inputs:', allInputs.map(d => ({
-      id: d.deviceId,
-      label: d.label || 'Unknown Device',
-      groupId: d.groupId
-    })));
-    
+    const allInputs = devices.filter((d) => d.kind === 'audioinput');
+
+    console.log(
+      'All detected audio inputs:',
+      allInputs.map((d) => ({
+        id: d.deviceId,
+        label: d.label || 'Unknown Device',
+        groupId: d.groupId
+      }))
+    );
+
     // Process all inputs to create a clean list
     const processedInputs = [];
     const seenLabels = new Set();
     const seenDeviceIds = new Set();
-    
+
     allInputs.forEach((device, index) => {
       // Skip if we've already processed this exact device ID
       if (seenDeviceIds.has(device.deviceId)) {
         return;
       }
-      
+
       let label = device.label || `Audio Input ${index + 1}`;
-      
+
       // Clean up common label prefixes/suffixes
       label = label.replace(/^Default - /, '');
       label = label.replace(/ \(.*Built-in.*\)$/, ' (Built-in)');
-      
+
       // Handle duplicate labels by adding device type info
       if (seenLabels.has(label)) {
         let counter = 2;
@@ -192,10 +195,10 @@ class AudioProcessor {
         }
         label = newLabel;
       }
-      
+
       seenLabels.add(label);
       seenDeviceIds.add(device.deviceId);
-      
+
       const rank = this.deviceRank(label);
       processedInputs.push({
         deviceId: device.deviceId,
@@ -207,11 +210,11 @@ class AudioProcessor {
         isBuiltIn: this.isBuiltInDevice(label)
       });
     });
-    
+
     // One rank decides the order, so the dropdown and the auto-selection can
     // never disagree about which device is best. Ties sort by label.
     processedInputs.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
-    
+
     console.log('Processed audio inputs:', processedInputs);
     return processedInputs;
   }
@@ -224,11 +227,15 @@ class AudioProcessor {
   // Serato's mixer. PHI-172.
   isVirtualDevice(label) {
     const virtualKeywords = [
-      'virtual', 'loopback', 'blackhole', 'soundflower',
-      'aggregate', 'multi-output'
+      'virtual',
+      'loopback',
+      'blackhole',
+      'soundflower',
+      'aggregate',
+      'multi-output'
     ];
     const lower = label.toLowerCase();
-    return virtualKeywords.some(keyword => lower.includes(keyword));
+    return virtualKeywords.some((keyword) => lower.includes(keyword));
   }
 
   isDJDevice(label) {
@@ -237,7 +244,7 @@ class AudioProcessor {
 
   isBuiltInDevice(label) {
     const builtInKeywords = ['built-in', 'internal', 'macbook', 'imac'];
-    return builtInKeywords.some(keyword => label.toLowerCase().includes(keyword));
+    return builtInKeywords.some((keyword) => label.toLowerCase().includes(keyword));
   }
 
   /* The single answer to "how good is this input?", lower being better.
@@ -260,7 +267,7 @@ class AudioProcessor {
     if (/ddj.*rev\s*1/.test(lower)) return RANK.DJ_DDJ_REV1;
     if (lower.includes('ddj')) return RANK.DJ_DDJ;
     if (lower.includes('pioneer')) return RANK.DJ_PIONEER;
-    if (['serato', 'traktor', 'rekordbox', 'djm', 'cdj'].some(k => lower.includes(k))) {
+    if (['serato', 'traktor', 'rekordbox', 'djm', 'cdj'].some((k) => lower.includes(k))) {
       return RANK.DJ_OTHER;
     }
 
@@ -272,14 +279,14 @@ class AudioProcessor {
 
   // Inputs arrive rank-sorted, so the best DJ device is simply the first one.
   findDJInput(inputs) {
-    return inputs.find(d => d.isDJ) || null;
+    return inputs.find((d) => d.isDJ) || null;
   }
 
   // Width of one FFT bin, in Hz. Everything frequency-aware derives from this
   // rather than from array positions, which is the whole of the PHI-150 fix.
   static binWidth(spec, sampleRate) {
     if (!spec || spec.length === 0 || !sampleRate) return 0;
-    return (sampleRate / 2) / spec.length;
+    return sampleRate / 2 / spec.length;
   }
 
   bandEnergy(spec, sampleRate) {
@@ -341,8 +348,8 @@ class AudioProcessor {
       this.rms += (currentRMS - this.rms) * settle(0.075);
 
       // Convert byte frequency data to float spectrum
-      this.spectrum = Array.from(this.dataArray).map(val => val / 255);
-      
+      this.spectrum = Array.from(this.dataArray).map((val) => val / 255);
+
       // Bands arrive already normalised to 0..1 by bandEnergy(); the only job
       // left here is frame-to-frame smoothing on top of the analyser's own.
       const sampleRate = this.audioContext.sampleRate;
@@ -377,7 +384,6 @@ class AudioProcessor {
           isActive: (this.rms || 0) > 0.001
         });
       }
-      
     } catch (error) {
       console.error('Error in audio data update:', error);
       // Continue with fallback values
@@ -389,27 +395,27 @@ class AudioProcessor {
     try {
       // Stop any existing audio first
       this.stop();
-      
+
       // Check if MediaDevices API is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('MediaDevices API not supported in this browser');
       }
-      
+
       let constraints;
       if (deviceId) {
         // Try with exact device first, then fallback to ideal
-        constraints = { 
-          audio: { 
+        constraints = {
+          audio: {
             deviceId: { exact: deviceId },
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
             sampleRate: 44100
-          } 
+          }
         };
       } else {
         // Use more permissive constraints for auto-select
-        constraints = { 
+        constraints = {
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
@@ -418,9 +424,9 @@ class AudioProcessor {
           }
         };
       }
-      
+
       console.log('Requesting audio with constraints:', constraints);
-      
+
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -434,7 +440,7 @@ class AudioProcessor {
           throw exactError;
         }
       }
-      
+
       // Store stream for cleanup
       this.stream = stream;
 
@@ -455,7 +461,7 @@ class AudioProcessor {
       this.analyserNode.smoothingTimeConstant = 0.3; // Less smoothing for more responsive visuals
       this.analyserNode.minDecibels = -90;
       this.analyserNode.maxDecibels = -10;
-      
+
       this.sourceNode.connect(this.analyserNode);
       await this.startKickWorklet();
 
@@ -477,25 +483,25 @@ class AudioProcessor {
       this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
       this.updateAudioData();
 
-
       console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
-      
     } catch (error) {
       this.isRunning = false;
       console.error('Audio start error:', error);
-      
+
       // Provide more specific error messages
       let errorMessage = 'Failed to start audio: ';
       if (error.name === 'NotAllowedError') {
-        errorMessage += 'Microphone access denied. Please allow microphone permissions and try again.';
+        errorMessage +=
+          'Microphone access denied. Please allow microphone permissions and try again.';
       } else if (error.name === 'NotFoundError') {
         errorMessage += 'No audio input device found. Please connect an audio device.';
       } else if (error.name === 'NotReadableError') {
-        errorMessage += 'Audio device is busy or unavailable. Please close other applications using audio.';
+        errorMessage +=
+          'Audio device is busy or unavailable. Please close other applications using audio.';
       } else {
         errorMessage += error.message;
       }
-      
+
       throw new Error(errorMessage);
     }
   }
@@ -510,16 +516,16 @@ class AudioProcessor {
 
     // Stop all audio tracks
     if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
+      this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
     }
-    
+
     // Disconnect and clean up audio nodes
     if (this.sourceNode) {
       this.sourceNode.disconnect();
       this.sourceNode = null;
     }
-    
+
     if (this.analyserNode) {
       this.analyserNode.disconnect();
       this.analyserNode = null;
@@ -536,13 +542,13 @@ class AudioProcessor {
       this.silentSink = null;
     }
     this.usingWorklet = false;
-    
+
     // Close audio context
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
       this.audioContext = null;
     }
-    
+
     // Reset audio data
     this.rms = this.bass = this.mid = this.high = 0;
     this.spectrum = [];
@@ -706,7 +712,7 @@ class AudioProcessor {
     // Two onsets can only ever agree with themselves. Wait for a real sample.
     if (onsets.length < 8) return 0;
 
-    const BUCKET = 10;  // ms; finer than this is below the envelope's own rate
+    const BUCKET = 10; // ms; finer than this is below the envelope's own rate
     const min = this.minBeatInterval;
     const max = this.maxBeatInterval;
     const votes = new Map();
@@ -715,7 +721,7 @@ class AudioProcessor {
       for (let j = i + 1; j < onsets.length; j++) {
         const gap = onsets[j].t - onsets[i].t;
         if (gap < min) continue;
-        if (gap > max) break;  // onsets are in time order, so the rest are too
+        if (gap > max) break; // onsets are in time order, so the rest are too
         const bucket = Math.round(gap / BUCKET);
         votes.set(bucket, (votes.get(bucket) || 0) + onsets[i].v * onsets[j].v);
       }
