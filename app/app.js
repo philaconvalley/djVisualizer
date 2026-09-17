@@ -12,6 +12,11 @@ class DJVisualizerApp {
     this.lastFrameTime = 0;
     this.frameCount = 0;
 
+    // Whether the rail is currently showing the no-signal message, and what it
+    // showed before, so the message can step aside when signal returns.
+    this.noSignal = false;
+    this.statusBeforeNoSignal = '';
+
     // Gain controls
     this.bassGain = 1.0;
     this.midGain = 1.0;
@@ -128,6 +133,7 @@ class DJVisualizerApp {
       };
       this.visualizer.updateAudioData(adjustedData);
       this.updateBPM(data.bpm);
+      this.updateSignalStatus(data.silentForMs);
     };
 
     // FPS is a rendering measurement and has to be counted where rendering
@@ -266,12 +272,25 @@ class DJVisualizerApp {
       await this.audioProcessor.startAudio(this.selectedDeviceId);
       this.visualizer.start();
 
+      // The change handler wrote "Selected:" before the restart. Once audio is
+      // flowing again, the rail must say what it says after a normal start.
+      this.deviceStatusSpan.textContent = this.activeStatus();
+
       console.log('Audio restarted with new device');
     } catch (error) {
       console.error('Failed to restart audio with new device:', error);
       this.stopAudio();
       this.showError('Failed to switch audio device. Please try again.');
     }
+  }
+
+  // What the rail says while audio is running. One place, so a normal start
+  // and a device switch mid-run can never describe the same state differently.
+  activeStatus() {
+    const device = this.selectedDeviceId
+      ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
+      : 'Auto-selected device';
+    return `Active: ${device}`;
   }
 
   async toggleAudio() {
@@ -297,12 +316,9 @@ class DJVisualizerApp {
       this.startBtn.disabled = false;
 
       // Update status to show active device
-      const currentDevice = this.selectedDeviceId
-        ? this.audioInputSelect.selectedOptions[0]?.textContent.replace('DJ · ', '')
-        : 'Auto-selected device';
-      this.deviceStatusSpan.textContent = `Active: ${currentDevice}`;
+      this.deviceStatusSpan.textContent = this.activeStatus();
 
-      console.log('DJ Visualizer started with device:', currentDevice);
+      console.log('DJ Visualizer started:', this.deviceStatusSpan.textContent);
     } catch (error) {
       console.error('Failed to start audio:', error);
       this.setTransport('Start', false);
@@ -380,11 +396,35 @@ class DJVisualizerApp {
     }
   }
 
+  // "Active" means a stream opened, not that audio is arriving. A stream that
+  // opens and delivers only digital silence would otherwise read exactly like a
+  // working one, at load-in, when there is still time to fix it.
+  //
+  // Three seconds rides over a gap between tracks. The message suggests rather
+  // than alarms, never blocks anything, and clears the moment signal returns.
+  updateSignalStatus(silentForMs) {
+    const NO_SIGNAL_AFTER_MS = 3000;
+    const NO_SIGNAL_TEXT = 'No signal \u2014 check the mixer output';
+
+    const silent = this.isRunning && silentForMs >= NO_SIGNAL_AFTER_MS;
+    if (silent === this.noSignal) return;
+    this.noSignal = silent;
+
+    if (silent) {
+      this.statusBeforeNoSignal = this.deviceStatusSpan.textContent;
+      this.deviceStatusSpan.textContent = NO_SIGNAL_TEXT;
+    } else if (this.deviceStatusSpan.textContent === NO_SIGNAL_TEXT) {
+      // Only restore if nothing else has written to the rail in the meantime.
+      this.deviceStatusSpan.textContent = this.statusBeforeNoSignal;
+    }
+  }
+
   stopAudio() {
     this.audioProcessor.stop();
     this.visualizer.stop();
 
     this.isRunning = false;
+    this.noSignal = false;
     this.setTransport('Start', false);
 
     // Update status to show ready state
