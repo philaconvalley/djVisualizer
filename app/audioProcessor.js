@@ -1,3 +1,11 @@
+// Verbose logging, off by default. Load the app with ?debug to turn it on.
+// One flag for the whole app: this file loads first, so app.js reads the same
+// global instead of declaring its own copy that could drift. Guard each call
+// with `if (DEBUG)` so the arguments are never built when the flag is off, and
+// do not reassign console.log to a no-op — that breaks the devtools link to
+// the source line. Warnings and errors are not gated. PHI-153.
+const DEBUG = new URLSearchParams(location.search).has('debug');
+
 // Real frequency bounds, in Hz. These are the product's vocabulary and the app
 // prints them to the operator in the rail, so the math has to honour them
 // literally. The previous implementation split the FFT array by index fraction
@@ -115,6 +123,8 @@ class AudioProcessor {
     this.beatFloor = 0.012; // below this the room is quiet, not grooving
     this.lastBeatEnergy = 0;
     this.lastAnalysisAt = 0;
+    // Analysis-tick errors already logged this audio session. See updateAudioData().
+    this.reportedErrors = new Set();
 
     // Every onset, with its amplitude, over the last few seconds. The tempo is
     // read from this whole series rather than from consecutive gaps, because
@@ -167,14 +177,16 @@ class AudioProcessor {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const allInputs = devices.filter((d) => d.kind === 'audioinput');
 
-    console.log(
-      'All detected audio inputs:',
-      allInputs.map((d) => ({
-        id: d.deviceId,
-        label: d.label || 'Unknown Device',
-        groupId: d.groupId
-      }))
-    );
+    if (DEBUG) {
+      console.log(
+        'All detected audio inputs:',
+        allInputs.map((d) => ({
+          id: d.deviceId,
+          label: d.label || 'Unknown Device',
+          groupId: d.groupId
+        }))
+      );
+    }
 
     // Process all inputs to create a clean list
     const processedInputs = [];
@@ -223,7 +235,7 @@ class AudioProcessor {
     // never disagree about which device is best. Ties sort by label.
     processedInputs.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
 
-    console.log('Processed audio inputs:', processedInputs);
+    if (DEBUG) console.log('Processed audio inputs:', processedInputs);
     return processedInputs;
   }
 
@@ -408,7 +420,14 @@ class AudioProcessor {
         });
       }
     } catch (error) {
-      console.error('Error in audio data update:', error);
+      // This catch runs inside a 60 Hz timer. Logged every tick, one fault
+      // becomes 60 messages a second at the moment the app is already in
+      // trouble. Report each distinct error once per audio session instead.
+      const key = `${error?.name}: ${error?.message}`;
+      if (!this.reportedErrors.has(key)) {
+        this.reportedErrors.add(key);
+        console.error('Error in audio data update (reported once):', error);
+      }
       // Continue with fallback values
       this.rms = this.bass = this.mid = this.high = 0;
     }
@@ -448,7 +467,7 @@ class AudioProcessor {
         };
       }
 
-      console.log('Requesting audio with constraints:', constraints);
+      if (DEBUG) console.log('Requesting audio with constraints:', constraints);
 
       let stream;
       try {
@@ -494,6 +513,7 @@ class AudioProcessor {
       this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
       this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
       this.silentSince = null;
+      this.reportedErrors.clear();
 
       // Reset audio values
       this.rms = this.bass = this.mid = this.high = 0;
@@ -508,7 +528,9 @@ class AudioProcessor {
       this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
       this.updateAudioData();
 
-      console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
+      if (DEBUG) {
+        console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
+      }
     } catch (error) {
       this.isRunning = false;
       console.error('Audio start error:', error);
@@ -589,7 +611,7 @@ class AudioProcessor {
     this.lastBeatTime = 0;
     this.lastBeatEnergy = 0;
 
-    console.log('Audio stopped and cleaned up');
+    if (DEBUG) console.log('Audio stopped and cleaned up');
   }
 
   async startKickWorklet() {

@@ -38,7 +38,7 @@ export default [
         {
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
-          varsIgnorePattern: '^(AudioProcessor|BANDS)$'
+          varsIgnorePattern: '^(AudioProcessor|BANDS|DEBUG)$'
         }
       ]
     }
@@ -62,7 +62,7 @@ export default [
   {
     files: ['app/app.js'],
     languageOptions: {
-      globals: { AudioProcessor: 'readonly', DJVisualizer: 'readonly' }
+      globals: { AudioProcessor: 'readonly', DJVisualizer: 'readonly', DEBUG: 'readonly' }
     }
   },
 
