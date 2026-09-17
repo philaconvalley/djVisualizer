@@ -299,6 +299,109 @@ async function silenceTest() {
   });
 }
 
+/* "Active" means a stream opened, not that audio is arriving (PHI-173). The
+ * rail must say so when a stream carries no signal, must clear by itself when
+ * signal returns, and must stay quiet through a short gap between tracks.
+ *
+ * Each case records every change to the rail, timed from the Start click, and
+ * the longest silence the app measured, so a gap test cannot pass by simply
+ * never seeing a gap.
+ */
+const NO_SIGNAL = 'No signal';
+
+function recordRail(page) {
+  return page.evaluate(() => {
+    const status = document.getElementById('deviceStatus');
+    window.__rail = { startedAt: null, changes: [], longestSilenceMs: 0 };
+    document
+      .getElementById('start')
+      .addEventListener('click', () => (window.__rail.startedAt = performance.now()), {
+        once: true,
+        capture: true
+      });
+    new MutationObserver(() => {
+      if (window.__rail.startedAt === null) return;
+      window.__rail.changes.push({
+        at: Math.round(performance.now() - window.__rail.startedAt),
+        text: status.textContent
+      });
+    }).observe(status, { childList: true, characterData: true, subtree: true });
+    // Wrapped only if present, so a build without the feature fails these
+    // checks by name instead of crashing the whole run.
+    if (typeof djApp.updateSignalStatus === 'function') {
+      const update = djApp.updateSignalStatus.bind(djApp);
+      djApp.updateSignalStatus = (silentForMs) => {
+        window.__rail.longestSilenceMs = Math.max(window.__rail.longestSilenceMs, silentForMs);
+        update(silentForMs);
+      };
+    }
+  });
+}
+
+const railLog = (page) => page.evaluate(() => window.__rail);
+const railText = (page) => page.evaluate(() => document.getElementById('deviceStatus').textContent);
+const waitForRail = (page, hasNoSignal, timeout) =>
+  page
+    .waitForFunction(
+      ([text, want]) => document.getElementById('deviceStatus').textContent.includes(text) === want,
+      [NO_SIGNAL, hasNoSignal],
+      { timeout }
+    )
+    .then(() => true)
+    .catch(() => false);
+
+async function noSignalTest() {
+  console.log('\nNo signal → the rail must not claim a dead input is fine');
+
+  await withAudio(
+    'silence.wav',
+    async (page, errors) => {
+      const shown = await waitForRail(page, true, 6000);
+      const first = (await railLog(page)).changes.find((c) => c.text.includes(NO_SIGNAL));
+      check(
+        'a silent stream shows no signal',
+        shown,
+        shown ? `"${await railText(page)}"` : 'never'
+      );
+      check(
+        'no signal waits about three seconds',
+        !!first && first.at >= 2900 && first.at <= 4500,
+        first ? `after ${first.at} ms` : 'never shown'
+      );
+      check('silent stream raises no page errors', errors.length === 0, errors[0] || 'clean');
+    },
+    recordRail
+  );
+
+  await withAudio(
+    'silence-then-tone.wav',
+    async (page) => {
+      const shown = await waitForRail(page, true, 7000);
+      const cleared = shown && (await waitForRail(page, false, 8000));
+      const text = await railText(page);
+      check('no signal clears by itself when signal returns', cleared, `"${text}"`);
+      check('the rail goes back to what it said before', cleared && text.length > 0, `"${text}"`);
+    },
+    recordRail
+  );
+
+  await withAudio(
+    'tone-with-gaps.wav',
+    async (page) => {
+      await page.waitForTimeout(9000);
+      const log = await railLog(page);
+      const raised = log.changes.some((c) => c.text.includes(NO_SIGNAL));
+      check(
+        'gaps between tracks were measured as silence',
+        log.longestSilenceMs >= 1000,
+        `longest ${Math.round(log.longestSilenceMs)} ms`
+      );
+      check('a 1.5 s gap never raises no signal', !raised, raised ? 'raised' : 'quiet');
+    },
+    recordRail
+  );
+}
+
 /* Device labels observed on the DJ laptop during the PHI-171 hardware run.
  *
  * Three virtual audio drivers is a normal working DJ machine, not an exotic
@@ -473,6 +576,7 @@ try {
   await tempoTest('kick-125bpm-bassline.wav', 125);
   await modeTest();
   await silenceTest();
+  await noSignalTest();
 } finally {
   server.close();
 }

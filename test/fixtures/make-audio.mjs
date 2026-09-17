@@ -152,3 +152,27 @@ writeWav('kick-125bpm-bassline.wav', kickWithSyncopatedBass(125, 24));
 // Stage-load fixture for test/stall-trace.mjs. Sixty seconds, so a long dwell
 // does not loop mid-window.
 writeWav('broadband-124bpm.wav', broadbandMix(124, 60));
+
+// No-signal fixtures (PHI-173). Silence here is exact digital zero, which is
+// what a loopback with nothing routed, a muted channel, or the wrong output
+// actually delivers.
+const silence = (seconds) => new Float32Array(Math.round(RATE * seconds));
+function concat(...parts) {
+  const out = new Float32Array(parts.reduce((n, part) => n + part.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
+// A stream that opens and never carries audio.
+writeWav('silence.wav', silence(12));
+// Dead at load-in, then the mixer output gets fixed. The message must clear.
+writeWav('silence-then-tone.wav', concat(silence(5), tone(440, 8)));
+// Short gaps, like the space between two tracks. Must never raise the message.
+writeWav(
+  'tone-with-gaps.wav',
+  concat(...Array.from({ length: 4 }, () => concat(tone(440, 3), silence(1.5))))
+);
