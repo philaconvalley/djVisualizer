@@ -502,7 +502,9 @@ class AudioProcessor {
         errorMessage += error.message;
       }
 
-      throw new Error(errorMessage);
+      // Keep the browser's original error attached. The message is for the
+      // operator; the cause keeps its name and stack for whoever debugs it.
+      throw new Error(errorMessage, { cause: error });
     }
   }
 
