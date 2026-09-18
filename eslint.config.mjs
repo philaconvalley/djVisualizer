@@ -66,6 +66,16 @@ export default [
     }
   },
 
+  // The sandbox entry point. Classic script, loaded after the app's files, so
+  // it reads their globals from the shared scope the same way app.js does.
+  {
+    files: ['sandbox/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { ...globals.browser, AudioProcessor: 'readonly', DJVisualizer: 'readonly' }
+    }
+  },
+
   // Test drivers run in Node, but code inside page.evaluate() callbacks runs
   // in the page, where the app's globals exist. Only the globals those
   // callbacks actually read are declared, so a typo on the Node side still fails.
@@ -77,7 +87,8 @@ export default [
         ...globals.browser,
         djApp: 'readonly',
         hw: 'readonly',
-        AudioProcessor: 'readonly'
+        AudioProcessor: 'readonly',
+        DJVisualizer: 'readonly'
       }
     }
   },
