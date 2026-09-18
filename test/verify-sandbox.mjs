@@ -138,25 +138,40 @@ async function tabCaptureTest(page) {
     oscillator.connect(destination);
     oscillator.start();
 
+    // A real getDisplayMedia stream carries a video track beside the audio
+    // one — that is the track startTabAudio must discard. Without it here,
+    // there is nothing for that discard to remove, and the check below
+    // would pass for the wrong reason.
+    const canvas = document.createElement('canvas');
+    const videoTrack = canvas.captureStream(1).getVideoTracks()[0];
+    const stream = new MediaStream([...destination.stream.getAudioTracks(), videoTrack]);
+
     let asked = null;
     navigator.mediaDevices.getDisplayMedia = (options) => {
       asked = options;
-      return Promise.resolve(destination.stream);
+      return Promise.resolve(stream);
     };
 
     const processor = new AudioProcessor();
     await processor.startTabAudio();
     await new Promise((r) => setTimeout(r, 1200));
     const data = processor.getAudioData();
+    const videoTracksLeft = stream.getVideoTracks().length;
     processor.stop();
     context.close();
-    return { asked, bass: data.bass, high: data.high };
+    return { asked, bass: data.bass, high: data.high, videoTracksLeft };
   });
 
   check(
     'startTabAudio asks for video and audio',
     outcome.asked && outcome.asked.audio === true && outcome.asked.video === true,
     JSON.stringify(outcome.asked)
+  );
+
+  check(
+    'startTabAudio discards the video track',
+    outcome.videoTracksLeft === 0,
+    `video tracks remaining: ${outcome.videoTracksLeft}`
   );
 
   check(
