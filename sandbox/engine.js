@@ -152,7 +152,8 @@ class DJVisualizerSandbox extends HTMLElement {
 
     notes.push('Look for a missing quote mark, or a note with no closing arrow, then reload.');
 
-    // Kept, because the GIF's callback lands later and writes to the same line.
+    // Kept, because every later message lands on the same line: the GIF's
+    // callback, and everything useTab and useFile report.
     // A GIF that did not load is obvious from the stage; a name or a colour
     // that came out wrong is not, so that explanation is the one that must
     // survive the collision.
@@ -160,10 +161,11 @@ class DJVisualizerSandbox extends HTMLElement {
     this.status.textContent = this.typoNote;
   }
 
-  // Everything written into the rail before the student starts their music goes
-  // through here, so a second message joins the first instead of replacing it.
-  // Once they press play, useTab and useFile own the line and say what is
-  // playing.
+  // Every message the rail shows goes through here, so a second one joins the
+  // first instead of replacing it. The typo note is the one that has to survive:
+  // a student who presses the big labelled play button before reading small grey
+  // text used to lose the only explanation of why their name vanished. useTab
+  // destroyed it on the click, before the picker even opened.
   say(text) {
     this.status.textContent = this.typoNote ? this.typoNote + ' ' + text : text;
   }
@@ -269,30 +271,32 @@ class DJVisualizerSandbox extends HTMLElement {
   }
 
   async useTab() {
-    this.status.textContent = 'Choose your music tab, and tick "Share tab audio".';
+    this.say('Choose your music tab, and tick "Share tab audio".');
     try {
       await this.processor.startTabAudio();
       this.visualizer.start();
-      this.status.textContent = 'Playing your tab';
+      this.say('Playing your tab');
     } catch (error) {
       console.debug('sandbox tab source failed', error);
-      this.status.textContent = OWN_MESSAGES.has(error && error.message)
-        ? error.message
-        : 'Something went wrong. Press the button and try again.';
+      this.say(
+        OWN_MESSAGES.has(error && error.message)
+          ? error.message
+          : 'Something went wrong. Press the button and try again.'
+      );
     }
   }
 
   async useFile() {
     const file = this.fileInput.files[0];
     if (!file) return;
-    this.status.textContent = 'Loading ' + file.name;
+    this.say('Loading ' + file.name);
     try {
       await this.processor.startFileAudio(file);
       this.visualizer.start();
-      this.status.textContent = 'Playing ' + file.name;
+      this.say('Playing ' + file.name);
     } catch (error) {
       console.debug('sandbox file source failed', error);
-      this.status.textContent = DJVisualizerSandbox.fileErrorText(error);
+      this.say(DJVisualizerSandbox.fileErrorText(error));
     }
   }
 }

@@ -65,4 +65,11 @@ dj-visualizer {
   text-align: right;
   color: rgba(235, 235, 245, 0.8);
   font-size: 13px;
+  /* The typo note now stays on the line while playback text joins it, so the
+     longest real message — rebuilt, plus missing colours, plus unreadable ones,
+     plus what is playing — is far taller than the rail. The rail height is fixed
+     at 64px and body hides its overflow, so without these two lines the message
+     a confused student is being told to read is the one that clips away. */
+  max-height: 100%;
+  overflow-y: auto;
 }

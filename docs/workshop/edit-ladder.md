@@ -34,8 +34,8 @@ Stop here. Look at the screen while a song plays. Watch which colour moves when.
 
 ## If something looks wrong
 
-**Read the grey words at the bottom right of the screen before you press play.** They
-name what broke. The moment you press play, those words are gone for good.
+**Read the grey words at the bottom right of the screen.** They name what broke. They stay
+there while your music plays.
 
 If nothing is moving, it is almost always the music, not your work. Check these in order:
 
