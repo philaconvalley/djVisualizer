@@ -15,7 +15,8 @@
  *
  * It reads the asset list out of the page rather than hard-coding paths, so
  * adding a file cannot silently escape the check — the same enumerate-versus-
- * describe lesson that caused the original bug.
+ * describe lesson that caused the original bug. It does this for two pages: the
+ * live app at `/` and the student sandbox at `/sandbox/`.
  *
  *   node test/smoke-deploy.mjs                       # the live site
  *   node test/smoke-deploy.mjs https://some-preview   # a deploy preview
@@ -51,35 +52,60 @@ async function get(path) {
 
 console.log(`Smoke-testing ${BASE}\n`);
 
-/* The page itself. */
-const page = await get('/');
-check('page returns 200', page.status === 200, page.error || `status ${page.status}`);
-check('page is HTML', /text\/html/i.test(page.type), page.type || 'no content-type');
-check(
-  'page is the visualizer',
-  page.body.includes('id="p5-canvas"'),
-  page.body.includes('<title>') ? page.body.match(/<title>([^<]*)</)?.[1] : 'no title'
-);
-
-if (page.status !== 200) {
-  console.log('\nPage did not load; skipping asset checks.');
-  process.exit(1);
-}
-
-/* Every asset the page actually references. Read from the markup, never from a
-   hard-coded list — a list would go stale exactly when a new file is added,
-   which is the circumstance that broke the deploy in the first place. */
-const assets = [
-  ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => ({
-    path: m[1],
-    kind: 'js'
-  })),
-  ...[...page.body.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi)].map(
-    (m) => ({ path: m[1], kind: 'css' })
-  )
+/* Every page whose assets have to survive a deploy. The sandbox is the second
+   one because each workshop station opens a CodePen that loads the sandbox's
+   five files from this host, cross-origin. Nothing on the home page references
+   sandbox.css or sandbox/engine.js, so before this root existed a `.js` served
+   as `text/html` would break twelve laptops at once and every check here would
+   still pass. */
+const ROOTS = [
+  { path: '/', marker: 'id="p5-canvas"', label: 'the visualizer' },
+  { path: '/sandbox/', marker: '<dj-visualizer', label: 'the student sandbox' }
 ];
 
-check('page references assets', assets.length > 0, `${assets.length} found`);
+/* Every asset the pages actually reference. Read from the markup, never from a
+   hard-coded list — a list would go stale exactly when a new file is added,
+   which is the circumstance that broke the deploy in the first place. */
+const assets = [];
+const seen = new Set();
+
+for (const root of ROOTS) {
+  const page = await get(root.path);
+  check(`${root.path} returns 200`, page.status === 200, page.error || `status ${page.status}`);
+  check(`${root.path} is HTML`, /text\/html/i.test(page.type), page.type || 'no content-type');
+  check(
+    `${root.path} is ${root.label}`,
+    page.body.includes(root.marker),
+    page.body.includes('<title>') ? page.body.match(/<title>([^<]*)</)?.[1] : 'no title'
+  );
+
+  if (page.status !== 200) {
+    console.log(`\n${root.path} did not load; skipping its asset checks.`);
+    continue;
+  }
+
+  const found = [
+    ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => ({
+      path: m[1],
+      kind: 'js'
+    })),
+    ...[...page.body.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi)].map(
+      (m) => ({ path: m[1], kind: 'css' })
+    )
+  ];
+
+  check(`${root.path} references assets`, found.length > 0, `${found.length} found`);
+
+  // The sandbox writes its paths relative to /sandbox/, so `../app/x.js` has to
+  // resolve against the page that names it. Resolving here also means the two
+  // pages' shared files are fetched once, under one name.
+  for (const asset of found) {
+    const href = new URL(asset.path, `${BASE}${root.path}`).pathname;
+    if (seen.has(href)) continue;
+    seen.add(href);
+    assets.push({ path: href, kind: asset.kind });
+  }
+}
 
 const EXPECT = {
   js: { pattern: /javascript|ecmascript/i, label: 'JavaScript' },
@@ -87,7 +113,7 @@ const EXPECT = {
 };
 
 for (const asset of assets) {
-  const href = asset.path.startsWith('/') ? asset.path : `/${asset.path}`;
+  const href = asset.path;
   const res = await get(href);
   const expect = EXPECT[asset.kind];
 
