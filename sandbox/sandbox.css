@@ -10,7 +10,11 @@ body {
 }
 
 body {
-  background: var(--stage, #000);
+  /* Flat black, not a token. --stage was a fourth student colour until Task 5:
+     the canvas repaints its own background every frame, so editing it changed
+     nothing on screen. The token is gone from the template, so nothing defines
+     it. */
+  background: #000;
   color: #fff;
   font-family:
     system-ui,
