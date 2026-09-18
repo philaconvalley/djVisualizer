@@ -104,8 +104,11 @@ npm run verify:sandbox
 
 Checks the student sandbox: that the audio graph works from any source, that a song file
 drives the bands, and that a typo in the block a student edits stops neither the audio nor
-the visuals. Tab capture is verified by hand with `sandbox/probe.html`, because
-`getDisplayMedia` opens a native dialog no test driver can operate.
+the visuals. Tab capture is tested in two halves. The suite stubs the picker `getDisplayMedia`
+opens and proves this repository's own logic against it — the options it requests, the video
+track it discards, and the message a student gets if they share a tab without ticking "Share
+tab audio". Only the native picker itself falls outside a test driver's reach, so that part is
+checked by hand with `sandbox/probe.html`.
 
 ## Controls
 
