@@ -194,30 +194,107 @@ async function tabCaptureNoAudioTest(page) {
   );
 }
 
+// Every sandbox test gets its own page. tabCaptureTest and
+// tabCaptureNoAudioTest replace navigator.mediaDevices.getDisplayMedia on
+// their page and never put it back, so sharing a page with them would test a
+// browser this project does not ship.
+//
+// The fixtures live in test/fixtures/, not in sandbox/. netlify.toml publishes
+// the repository root, so anything under sandbox/ is a public page, and a
+// student who lands on a deliberately broken one has no way to know it is a
+// test.
+async function sandboxPage(browser, base, fixture) {
+  const page = await browser.newPage();
+  const thrown = [];
+  page.on('pageerror', (error) => thrown.push(error.message));
+  await page.goto(`${base}/test/fixtures/${fixture}`);
+  await page.waitForTimeout(700);
+  return { page, thrown };
+}
+
+// Reads the state of a booted sandbox. Every field is null-safe: when the boot
+// failed there is no window.djSandbox, and a test that throws here kills the
+// whole run and takes the other checks' results with it.
+const readSandbox = () => {
+  const el = window.djSandbox;
+  const canvas = document.querySelector('#p5-canvas canvas');
+  return {
+    booted: !!el,
+    stage: !!document.querySelector('.stage'),
+    canvasHost: !!document.getElementById('p5-canvas'),
+    modeSelect: !!document.getElementById('visualMode'),
+    // .stage canvas also matches #collage-canvas, which is hidden and has no
+    // CSS size. p5's canvas is the one the student sees.
+    painted: !!canvas && canvas.width > 0,
+    mode: el && el.visualizer ? el.visualizer.currentMode : null,
+    colours: el && el.visualizer ? el.visualizer.colors : null,
+    status: document.querySelector('.sandbox-status')
+      ? document.querySelector('.sandbox-status').textContent
+      : null,
+    name: document.querySelector('.sandbox-name')
+      ? document.querySelector('.sandbox-name').textContent
+      : null,
+    mediaType: el && el.visualizer ? el.visualizer.customMediaType : null,
+    hasMedia: !!(el && el.visualizer && el.visualizer.customMedia)
+  };
+};
+
+// Plays a real file through the booted element's own processor and reports the
+// bass reading. Null-safe for the same reason readSandbox is.
+const playFixtureTone = async (b) => {
+  const el = window.djSandbox;
+  if (!el) return null;
+  await el.processor.startFileAudio(b + '/test/fixtures/tone-100hz.wav');
+  await new Promise((r) => setTimeout(r, 1200));
+  const data = el.processor.getAudioData();
+  el.processor.stop();
+  return data.bass;
+};
+
 // The element has to build every DOM hook DJVisualizer.init() reaches for
 // without a guard. Missing any one of them throws during boot, and a student
 // sees a black page with no explanation.
-async function elementBootTest(page) {
-  const state = await page.evaluate(() => {
-    const el = document.querySelector('dj-visualizer');
-    return {
-      stage: !!document.querySelector('.stage'),
-      canvasHost: !!document.getElementById('p5-canvas'),
-      modeSelect: !!document.getElementById('visualMode'),
-      canvasDrawn: !!document.querySelector('.stage canvas'),
-      mode: el && el.visualizer ? el.visualizer.currentMode : null,
-      name: document.querySelector('.sandbox-name')
-        ? document.querySelector('.sandbox-name').textContent
-        : null
-    };
-  });
+//
+// The mode and the name come from real attributes on the element, which is the
+// only way a student sets them. An earlier version of this test passed them as
+// query parameters, so it asserted that a URL had been read and never touched
+// the attribute path at all.
+async function elementBootTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const state = await page.evaluate(readSandbox);
 
+  check('the attribute fixture boots without throwing', thrown.length === 0, thrown.join(' | '));
   check('the element builds .stage', state.stage);
   check('the element builds #p5-canvas', state.canvasHost);
   check('the element builds #visualMode', state.modeSelect);
-  check('p5 created a canvas', state.canvasDrawn);
+  check('p5 created a canvas', state.painted);
   check('the mode attribute is applied', state.mode === 'rings', String(state.mode));
   check('the dj-name attribute is shown', state.name === 'TEST DJ', String(state.name));
+
+  await page.close();
+}
+
+// The page a student actually opens has to boot, so the shipped template is
+// checked as it ships: no fixture, no parameters, its own committed values.
+async function shippedTemplateTest(browser, base) {
+  const page = await browser.newPage();
+  const thrown = [];
+  page.on('pageerror', (error) => thrown.push(error.message));
+  await page.goto(`${base}/sandbox/`);
+  await page.waitForTimeout(700);
+  const state = await page.evaluate(readSandbox);
+
+  check('the shipped template boots without throwing', thrown.length === 0, thrown.join(' | '));
+  check('the shipped template paints', state.painted);
+  check('the shipped template shows its dj-name', state.name === 'DJ NOVA', String(state.name));
+  check('the shipped template uses its mode', state.mode === 'flow', String(state.mode));
+  check(
+    "the shipped template's --bass reaches the canvas",
+    state.colours && String(state.colours.bass) === '255,69,58',
+    JSON.stringify(state.colours)
+  );
+
+  await page.close();
 }
 
 // The ticket's second condition, made executable: a typo in the block a
@@ -229,31 +306,13 @@ async function elementBootTest(page) {
 // whether the fallback worked or not. A student's typo is in their file
 // before the page boots, and so is this one.
 async function typoSafetyTest(browser, base) {
-  const page = await browser.newPage();
-  const thrown = [];
-  page.on('pageerror', (error) => thrown.push(error.message));
-
-  await page.goto(`${base}/sandbox/typo-fixture.html`);
-  await page.waitForTimeout(600);
-
-  const state = await page.evaluate(async (b) => {
-    const el = window.djSandbox;
-    await el.processor.startFileAudio(b + '/test/fixtures/tone-100hz.wav');
-    await new Promise((r) => setTimeout(r, 1200));
-    const data = el.processor.getAudioData();
-    const canvas = document.querySelector('.stage canvas');
-    el.processor.stop();
-    return {
-      bass: data.bass,
-      mode: el.visualizer.currentMode,
-      colours: el.visualizer.colors,
-      painted: !!canvas && canvas.width > 0
-    };
-  }, base);
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-typo.html');
+  const state = await page.evaluate(readSandbox);
+  const bass = await page.evaluate(playFixtureTone, base);
 
   check('a bad colour and a bad mode throw nothing', thrown.length === 0, thrown.join(' | '));
   check('the visuals still paint', state.painted);
-  check('the audio still reads', state.bass > 0.02, `bass ${state.bass.toFixed(3)}`);
+  check('the audio still reads', bass !== null && bass > 0.02, `bass ${bass}`);
   check(
     'a nonsense mode falls back rather than blanking',
     state.mode === 'flow',
@@ -261,8 +320,98 @@ async function typoSafetyTest(browser, base) {
   );
   check(
     'an unparseable colour keeps a usable value',
-    Array.isArray(state.colours.bass) && state.colours.bass.length === 3,
-    JSON.stringify(state.colours.bass)
+    !!state.colours && Array.isArray(state.colours.bass) && state.colours.bass.length === 3,
+    JSON.stringify(state.colours && state.colours.bass)
+  );
+
+  await page.close();
+}
+
+// The likeliest thing a 12-year-old types is not #rrggbb. It is "red", or the
+// three-digit hex they saw somewhere. DJVisualizer.parseColor accepts neither,
+// so both used to reach the canvas as white with no message — an edit that
+// looks like it did nothing. The sandbox resolves the token through the
+// browser's own colour parser before the visualizer reads it.
+async function colourWordTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-colour-words.html');
+  const state = await page.evaluate(readSandbox);
+  const rgb = (name) => (state.colours ? String(state.colours[name]) : 'no colours');
+
+  check('the colour-word fixture throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('a named colour reaches the canvas', rgb('bass') === '255,0,0', rgb('bass'));
+  check('three-digit hex reaches the canvas', rgb('mid') === '0,255,0', rgb('mid'));
+  check('rgb() still reaches the canvas', rgb('high') === '10,132,255', rgb('high'));
+
+  await page.close();
+}
+
+// The machine used to sit below the student's markup, so one missing character
+// in the region a student edits could swallow the stylesheet and all four
+// script tags. Nothing load-bearing sits after the student's last line any
+// more, and the element itself is rebuilt when the student's markup loses it.
+//
+// Each fixture is one real single-character break, verified in a browser:
+//   comment  — the closing --> of the block-3 comment is gone
+//   quote    — the closing " of gif="" is gone
+//   tag      — an element the student opened and never closed
+async function brokenMarkupTest(browser, base) {
+  for (const [label, fixture] of [
+    ['an unterminated comment', 'sandbox-broken-comment.html'],
+    ['an unclosed attribute quote', 'sandbox-broken-quote.html'],
+    ['an unclosed tag', 'sandbox-broken-tag.html']
+  ]) {
+    const { page, thrown } = await sandboxPage(browser, base, fixture);
+    const state = await page.evaluate(readSandbox);
+    const bass = await page.evaluate(playFixtureTone, base);
+
+    check(`${label} throws nothing`, thrown.length === 0, thrown.join(' | '));
+    check(`${label} still paints`, state.painted, JSON.stringify(state));
+    check(`${label} still reads audio`, bass !== null && bass > 0.02, `bass ${bass}`);
+
+    await page.close();
+  }
+}
+
+// The third Done-when condition: a GIF that is not there must fail as a
+// message, never as a stopped visualization. It must also not cost the student
+// the mode they chose, which the failure path used to reset to a hard-coded
+// default.
+async function gifMissingTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-gif-missing.html');
+  const state = await page.evaluate(readSandbox);
+  const bass = await page.evaluate(playFixtureTone, base);
+
+  check('a missing GIF throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('a missing GIF still paints', state.painted);
+  check('a missing GIF still reads audio', bass !== null && bass > 0.02, `bass ${bass}`);
+  check(
+    'a missing GIF names the file it could not find',
+    typeof state.status === 'string' && state.status.includes('nope.gif'),
+    String(state.status)
+  );
+  check("a missing GIF keeps the student's own mode", state.mode === 'rings', String(state.mode));
+
+  await page.close();
+}
+
+// The success path, which was also untested. A GIF that loads takes over the
+// stage, and the template's comment now says so.
+async function gifLoadedTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-gif-ok.html');
+  const state = await page.evaluate(readSandbox);
+
+  check('a loaded GIF throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('a loaded GIF still paints', state.painted);
+  check(
+    'a loaded GIF becomes the custom media',
+    state.hasMedia && state.mediaType === 'image',
+    `${state.mediaType}`
+  );
+  check('a loaded GIF takes over the mode', state.mode === 'custom', String(state.mode));
+  check(
+    'a loaded GIF reports no error',
+    state.status !== null && !/Could not find/.test(state.status),
+    String(state.status)
   );
 
   await page.close();
@@ -282,16 +431,14 @@ try {
   await tabCaptureTest(page);
   await tabCaptureNoAudioTest(page);
 
-  // The element tests need a real sandbox page, not the bare probe. They also
-  // need a page whose getDisplayMedia is not still stubbed by the two tab
-  // tests above, which never restore it.
-  const sandbox = await browser.newPage();
-  sandbox.on('pageerror', (error) => check('sandbox page threw', false, error.message));
-  await sandbox.goto(`${BASE}/sandbox/index.html?mode=rings&name=TEST%20DJ`);
-  await sandbox.waitForTimeout(600);
-  await elementBootTest(sandbox);
-
+  // Each of these boots a whole sandbox page, so each one gets its own.
+  await elementBootTest(browser, BASE);
+  await shippedTemplateTest(browser, BASE);
   await typoSafetyTest(browser, BASE);
+  await colourWordTest(browser, BASE);
+  await brokenMarkupTest(browser, BASE);
+  await gifMissingTest(browser, BASE);
+  await gifLoadedTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();

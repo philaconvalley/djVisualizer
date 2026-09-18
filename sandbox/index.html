@@ -4,18 +4,30 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- ================= YOU CAN CHANGE EVERYTHING BELOW ================= -->
+    <!-- ===================== THE MACHINE. LEAVE THIS ALONE. =====================
+         These five lines load the visualizer. They sit above your part of the
+         file on purpose. The browser reads a page from the top down, so by the
+         time it reaches your part, the machine is already running. That is why a
+         mistake in your part can never stop the music or the picture. -->
+
+    <link rel="stylesheet" href="sandbox.css" />
+    <script src="../vendor/p5.min.js"></script>
+    <script src="../app/audioProcessor.js"></script>
+    <script src="../app/visualizer.js"></script>
+    <script src="engine.js"></script>
+
+    <!-- ========================= YOUR PART STARTS HERE ========================= -->
 
     <!-- 1. The name of your page. Look at the browser tab after you reload. -->
     <title>My Playlist, Brought to Life</title>
 
     <style>
       :root {
-        /* 2. Your colours. Each one belongs to a part of the music. */
+        /* 2. Your colours. Each one belongs to a part of the music.
+              Write them any way you like: red, #f00, #ff4433, or rgb(255, 0, 0). */
         --bass: #ff453a; /* the low drums you feel in your chest */
         --mid: #30d158; /* the voice and most instruments */
         --high: #0a84ff; /* the cymbals and the bright edges */
-        --stage: #000000; /* the background behind everything */
       }
     </style>
   </head>
@@ -23,17 +35,14 @@
   <body>
     <!-- 3. Your name, your look, and your GIF.
          mode can be: spectrum, particles, rings, waves, mandala,
-                      tunnel, galaxy, polygons, custom, flow -->
+                      tunnel, galaxy, polygons, custom, flow
+         gif takes over the stage when you fill it in, so it replaces mode.
+         Leave gif empty to keep the mode you picked. -->
     <dj-visualizer dj-name="DJ NOVA" mode="flow" gif=""></dj-visualizer>
 
-    <!-- ================= YOU CAN CHANGE EVERYTHING ABOVE ================= -->
-    <!-- Below this line is the machine. Leave it alone and it will never
-         break, no matter what you type above. -->
-
-    <link rel="stylesheet" href="sandbox.css" />
-    <script src="../vendor/p5.min.js"></script>
-    <script src="../app/audioProcessor.js"></script>
-    <script src="../app/visualizer.js"></script>
-    <script src="engine.js"></script>
+    <!-- ========================== YOUR PART ENDS HERE ==========================
+         Everything between those two lines is yours. Change it, misspell it,
+         forget a quote mark — the music keeps playing and the picture keeps
+         moving. Fix your typo and reload to see your change. -->
   </body>
 </html>

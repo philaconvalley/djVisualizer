@@ -12,3 +12,9 @@ test/fixtures/*.wav
 # Prose is out of scope for now. Prettier rewrites Markdown tables and list
 # markers, and the docs here are read far more than they are edited.
 *.md
+
+# Fixtures whose markup is deliberately broken. Prettier cannot parse an
+# unterminated comment or an unclosed quote, which is the point of them:
+# test/verify-sandbox.mjs proves a student's typo cannot stop the sandbox.
+# Formatting them would repair them and delete the proof.
+test/fixtures/sandbox-broken-*.html

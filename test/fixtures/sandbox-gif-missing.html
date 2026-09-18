@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- TEST FIXTURE for test/verify-sandbox.mjs. The GIF path points at a file that is not there, on purpose.
+     It lives here, not in sandbox/, because netlify.toml publishes the
+     repository root: a broken page under sandbox/ is a public page. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script src="../../app/audioProcessor.js"></script>
+    <script src="../../app/visualizer.js"></script>
+    <script src="../../sandbox/engine.js"></script>
+
+    <title>Sandbox fixture</title>
+
+    <style>
+      :root {
+        --bass: #ff453a;
+        --mid: #30d158;
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <dj-visualizer dj-name="No GIF" mode="rings" gif="nope.gif"></dj-visualizer>
+  </body>
+</html>

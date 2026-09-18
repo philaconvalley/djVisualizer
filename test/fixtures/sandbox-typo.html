@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- TEST FIXTURE. KEEP THE TYPOS.
+     A copy of sandbox/index.html with three deliberate mistakes a student could
+     make: an unparseable --bass value, an unparseable --mid value, and a mode
+     that is not one of the ten. test/verify-sandbox.mjs loads this page to prove
+     that none of them stops the audio or the visuals. Correcting them removes
+     the proof.
+
+     It lives here, not in sandbox/, because netlify.toml publishes the
+     repository root: a broken page under sandbox/ is a public page. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script src="../../app/audioProcessor.js"></script>
+    <script src="../../app/visualizer.js"></script>
+    <script src="../../sandbox/engine.js"></script>
+
+    <title>My Playlist, Brought to Life</title>
+
+    <style>
+      :root {
+        --bass: notacolour; /* deliberate typo */
+        --mid: #zzzzzz; /* deliberate typo */
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- "purple-elephant" is a deliberate typo: it is not one of the ten modes. -->
+    <dj-visualizer dj-name="Oops" mode="purple-elephant" gif=""></dj-visualizer>
+  </body>
+</html>

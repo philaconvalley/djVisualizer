@@ -32,15 +32,13 @@ class DJVisualizerSandbox extends HTMLElement {
     if (this.booted) return;
     this.booted = true;
 
-    // A test affordance, not part of the student contract. See the plan.
-    const params = new URLSearchParams(location.search);
-
-    this.buildDom(
-      params.get('name') || this.getAttribute('dj-name') || '',
-      params.get('mode') || this.getAttribute('mode') || ''
-    );
+    this.buildDom(this.getAttribute('dj-name') || '', this.getAttribute('mode') || '');
 
     this.processor = new AudioProcessor();
+
+    // Before init(), because init() reads the palette once and never again.
+    this.resolvePalette();
+
     this.visualizer = new DJVisualizer();
     this.visualizer.init();
     this.visualizer.setRailHeight(RAIL_HEIGHT);
@@ -52,6 +50,34 @@ class DJVisualizerSandbox extends HTMLElement {
     this.applyGif(this.getAttribute('gif'));
 
     window.djSandbox = this;
+  }
+
+  // DJVisualizer.parseColor accepts #rrggbb and rgb() and nothing else. So
+  // "red" and "#f00" — the two things a 12-year-old is likeliest to type —
+  // both used to land on the canvas as white, with no message and no clue that
+  // the edit had failed. The browser's own parser knows every colour CSS has.
+  // Each token is resolved through it and written back as rgb(), so the
+  // visualizer reads a form it understands. Genuine nonsense is refused by the
+  // style setter, is left exactly as the student typed it, and still falls back
+  // to the previous value inside readPalette().
+  resolvePalette() {
+    const root = document.documentElement;
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+
+    for (const name of ['bass', 'mid', 'high']) {
+      const written = getComputedStyle(root)
+        .getPropertyValue('--' + name)
+        .trim();
+      if (!written) continue;
+      probe.style.color = '';
+      probe.style.color = written;
+      if (!probe.style.color) continue;
+      root.style.setProperty('--' + name, getComputedStyle(probe).color);
+    }
+
+    probe.remove();
   }
 
   // Every hook DJVisualizer.init() reaches for without a null guard is built
@@ -116,9 +142,13 @@ class DJVisualizerSandbox extends HTMLElement {
     const value = (path || '').trim();
     if (!value) return;
 
+    // The mode the student asked for. A GIF takes the stage while it loads, but
+    // a GIF that is not there must not cost them the choice they made.
+    const chosen = this.visualizer.currentMode;
+
     this.modeSelect.value = 'custom';
     this.visualizer.currentMode = 'custom';
-    this.visualizer.onModeChange('flow');
+    this.visualizer.onModeChange(chosen);
 
     this.visualizer.p5Instance.loadImage(
       value,
@@ -128,11 +158,26 @@ class DJVisualizerSandbox extends HTMLElement {
       },
       () => {
         this.status.textContent = 'Could not find the GIF at "' + value + '". Check the name.';
-        this.modeSelect.value = DEFAULT_MODE;
-        this.visualizer.currentMode = DEFAULT_MODE;
+        this.modeSelect.value = chosen;
+        this.visualizer.currentMode = chosen;
         this.visualizer.onModeChange('custom');
       }
     );
+  }
+
+  // A student never reads a browser's words. error.message reaches the status
+  // line only when this project wrote the string. Everything a browser raised
+  // is translated here, and the original goes to the console for whoever is
+  // helping them.
+  static fileErrorText(error) {
+    const name = (error && error.name) || (error && error.cause && error.cause.name) || '';
+    if (name === 'NotSupportedError') {
+      return 'That song file will not play here. Try an MP3 or an M4A.';
+    }
+    if (name === 'NotAllowedError') {
+      return 'Click the page once, then choose your song again.';
+    }
+    return 'Something went wrong. Press the button and try again.';
   }
 
   async useTab() {
@@ -142,7 +187,16 @@ class DJVisualizerSandbox extends HTMLElement {
       this.visualizer.start();
       this.status.textContent = 'Playing your tab';
     } catch (error) {
-      this.status.textContent = error.message;
+      console.debug('sandbox tab source failed', error);
+      // startTabAudio writes its own child-legible message for every failure
+      // it recognises, and those are kept. The one branch it does not write
+      // itself appends the browser's words to a prefix, and it is also the only
+      // branch that carries a cause it did not translate — so a cause that is
+      // not the refusal it handles marks the message to replace.
+      const carriesBrowserWords = !!error.cause && error.cause.name !== 'NotAllowedError';
+      this.status.textContent = carriesBrowserWords
+        ? 'Something went wrong. Press the button and try again.'
+        : error.message;
     }
   }
 
@@ -155,9 +209,31 @@ class DJVisualizerSandbox extends HTMLElement {
       this.visualizer.start();
       this.status.textContent = 'Playing ' + file.name;
     } catch (error) {
-      this.status.textContent = 'Could not play that file: ' + error.message;
+      console.debug('sandbox file source failed', error);
+      this.status.textContent = DJVisualizerSandbox.fileErrorText(error);
     }
   }
 }
 
 customElements.define('dj-visualizer', DJVisualizerSandbox);
+
+// Moving the stylesheet and the scripts into <head> keeps a typo in the student
+// region from swallowing the machine, but it cannot protect the element itself:
+// the element lives in that region. An unterminated comment swallows the tag,
+// and an unclosed attribute quote makes the parser drop it at the end of the
+// file. Either way the document has no <dj-visualizer> left and nothing boots —
+// a black page with nothing to read, which is the one outcome this sandbox
+// promises cannot happen. So when the element is missing after the document
+// finishes parsing, build one with the defaults. The student loses the name and
+// the mode they typed, which is the cost of the character they dropped, and
+// keeps the music and the visuals.
+function ensureElement() {
+  if (document.querySelector('dj-visualizer')) return;
+  document.body.appendChild(document.createElement('dj-visualizer'));
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', ensureElement);
+} else {
+  ensureElement();
+}
