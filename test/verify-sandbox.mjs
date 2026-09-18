@@ -6,8 +6,10 @@
  * media file drives it, and that a student's typo changes nothing but the
  * thing they typed.
  *
- * Tab capture is NOT covered here. getDisplayMedia opens a native Chrome
- * dialog that Playwright cannot operate. It is verified by hand with
+ * Tab capture IS covered here, with getDisplayMedia stubbed: the options the
+ * app asks for, the discard of the video track, and the error a tab shared
+ * without sound produces. Only the native Chrome dialog is beyond Playwright,
+ * so only the act of choosing a tab in it is verified by hand, with
  * sandbox/probe.html, once on a Mac and once on a partner Chromebook.
  *
  *   node test/verify-sandbox.mjs
@@ -639,6 +641,36 @@ async function gifMissingTest(browser, base) {
   await page.close();
 }
 
+// `custom` was offered to students in the template's mode comment, and with no
+// GIF it draws the empty drop target: a pulsing square on the whole stage, with
+// no message. The word is gone from both lists now, so a student who typed it
+// from an older handout has to land on a mode that really draws.
+async function modeFallbackTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-mode-custom.html');
+  const state = await page.evaluate(readSandbox);
+  const bass = await page.evaluate(playFixtureTone, base);
+
+  check('mode="custom" with no GIF throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('mode="custom" with no GIF still paints', state.painted);
+  check(
+    'mode="custom" with no GIF still reads audio',
+    bass !== null && bass > 0.02,
+    `bass ${bass}`
+  );
+  check(
+    'mode="custom" with no GIF falls back to a drawing mode',
+    state.mode === 'flow',
+    String(state.mode)
+  );
+  check(
+    'mode="custom" with no GIF draws no GIF',
+    state.hasMedia === false,
+    String(state.mediaType)
+  );
+
+  await page.close();
+}
+
 // The success path, which was also untested. A GIF that loads takes over the
 // stage, and the template's comment now says so.
 async function gifLoadedTest(browser, base) {
@@ -687,6 +719,7 @@ try {
   await brokenHeadCommentTest(browser, BASE);
   await quietWhenCorrectTest(browser, BASE);
   await errorWordingTest(browser, BASE);
+  await modeFallbackTest(browser, BASE);
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
 } finally {

@@ -11,6 +11,13 @@
  * not parse. Nothing a student can type in this file throws. PHI-223.
  */
 
+// Every mode a student may type into `mode`, and the list the template's comment
+// offers them. `custom` is deliberately absent: it draws the GIF, so with no GIF
+// it renders a pulsing empty square across the whole stage, says nothing, and
+// throws nothing. An edit that looks like a broken page is worse than one the
+// list never offered. applyGif assigns that mode directly and never looks it up
+// here, so the GIF path is unaffected. Keep this list and the template's comment
+// the same.
 const MODES = [
   'spectrum',
   'particles',
@@ -20,7 +27,6 @@ const MODES = [
   'tunnel',
   'galaxy',
   'polygons',
-  'custom',
   'flow'
 ];
 
@@ -236,6 +242,9 @@ class DJVisualizerSandbox extends HTMLElement {
     // a GIF that is not there must not cost them the choice they made.
     const chosen = this.visualizer.currentMode;
 
+    // The hidden select has no `custom` option, by design, so this clears its
+    // value. Nothing reads it after boot; the visualizer's own mode is the one
+    // that draws.
     this.modeSelect.value = 'custom';
     this.visualizer.currentMode = 'custom';
     this.visualizer.onModeChange(chosen);
