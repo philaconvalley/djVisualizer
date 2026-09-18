@@ -27,6 +27,32 @@ const MODES = [
 const DEFAULT_MODE = 'flow';
 const RAIL_HEIGHT = 64;
 
+// The same three values sandbox/index.html ships in its :root block. They are
+// repeated here because a student's typo can delete that block entirely — an
+// unclosed comment in the head swallows the whole <style> on its way to the
+// next closing fence — and three white bands is the failure the colour work
+// exists to prevent. Keep the two lists the same.
+const DEFAULT_PALETTE = { bass: '#ff453a', mid: '#30d158', high: '#0a84ff' };
+
+// The exact strings app/audioProcessor.js writes for a student to read.
+// error.message reaches the rail only when it is one of these. Everything else
+// is translated, including everything thrown deeper in the graph, where a
+// failed audio worklet says "Failed to load module script".
+//
+// An earlier version asked whether the error carried a cause and treated that
+// as "this project wrote it". It is not the same question, and anything thrown
+// inside attachStream answered it wrongly.
+//
+// Matching exactly is deliberate. If audioProcessor rewords one of these, the
+// sandbox stops recognising it and shows the plain message instead. That is the
+// safe direction to fail in: a student sees something they can act on, never a
+// browser's words.
+const OWN_MESSAGES = new Set([
+  'This browser cannot share a tab. Use Chrome, or pick a song file instead.',
+  'No tab was shared. Press the button again and choose your music tab.',
+  'That tab was shared without its sound. Try again and tick "Share tab audio" in the dialog.'
+]);
+
 class DJVisualizerSandbox extends HTMLElement {
   connectedCallback() {
     if (this.booted) return;
@@ -37,7 +63,7 @@ class DJVisualizerSandbox extends HTMLElement {
     this.processor = new AudioProcessor();
 
     // Before init(), because init() reads the palette once and never again.
-    this.resolvePalette();
+    this.paletteReport = this.resolvePalette();
 
     this.visualizer = new DJVisualizer();
     this.visualizer.init();
@@ -47,6 +73,7 @@ class DJVisualizerSandbox extends HTMLElement {
     this.processor.onDataUpdate = (data) => this.visualizer.updateAudioData(data);
     this.processor.onBeat = () => this.visualizer.onBeatEvent();
 
+    this.reportTypos();
     this.applyGif(this.getAttribute('gif'));
 
     window.djSandbox = this;
@@ -66,18 +93,65 @@ class DJVisualizerSandbox extends HTMLElement {
     probe.style.display = 'none';
     document.body.appendChild(probe);
 
+    // What went wrong, for reportTypos to say out loud. A colour that is
+    // missing and a colour that is misspelled are different mistakes and read
+    // as different sentences.
+    const report = { missing: [], unreadable: [] };
+
     for (const name of ['bass', 'mid', 'high']) {
       const written = getComputedStyle(root)
         .getPropertyValue('--' + name)
         .trim();
-      if (!written) continue;
+
+      // Nothing at all, which means the student's whole colour block is gone.
+      // Falling through here leaves three white bands, so the shipped values
+      // stand in and the rail says so.
+      if (!written) {
+        report.missing.push(name);
+        root.style.setProperty('--' + name, DEFAULT_PALETTE[name]);
+        continue;
+      }
+
       probe.style.color = '';
       probe.style.color = written;
-      if (!probe.style.color) continue;
+      if (!probe.style.color) {
+        report.unreadable.push(name);
+        continue;
+      }
+
       root.style.setProperty('--' + name, getComputedStyle(probe).color);
     }
 
     probe.remove();
+    return report;
+  }
+
+  // A rebuilt page and a page whose colours were swallowed both look exactly
+  // like a correct one. A student who typed dj-name="My Name and lost the
+  // closing quote mark does not learn that they made a typo — they learn that
+  // names do not work here. So the rail says what the typo cost, and what to
+  // look for. A page with nothing wrong says nothing: a warning on a correct
+  // page teaches a student to stop reading the rail.
+  reportTypos() {
+    const notes = [];
+
+    if (this.rebuilt) {
+      notes.push('Your name and your look went missing, so I used the plain ones.');
+    }
+    if (this.paletteReport.missing.length) {
+      notes.push('Your colours went missing, so I used the plain ones.');
+    }
+    if (this.paletteReport.unreadable.length) {
+      notes.push(
+        'These colours are not ones I know, so they came out white: ' +
+          this.paletteReport.unreadable.join(', ') +
+          '.'
+      );
+    }
+    if (!notes.length) return;
+
+    notes.push('Look for a missing quote mark " or a note that never closes, then reload.');
+    this.status.textContent = notes.join(' ');
   }
 
   // Every hook DJVisualizer.init() reaches for without a null guard is built
@@ -188,15 +262,9 @@ class DJVisualizerSandbox extends HTMLElement {
       this.status.textContent = 'Playing your tab';
     } catch (error) {
       console.debug('sandbox tab source failed', error);
-      // startTabAudio writes its own child-legible message for every failure
-      // it recognises, and those are kept. The one branch it does not write
-      // itself appends the browser's words to a prefix, and it is also the only
-      // branch that carries a cause it did not translate — so a cause that is
-      // not the refusal it handles marks the message to replace.
-      const carriesBrowserWords = !!error.cause && error.cause.name !== 'NotAllowedError';
-      this.status.textContent = carriesBrowserWords
-        ? 'Something went wrong. Press the button and try again.'
-        : error.message;
+      this.status.textContent = OWN_MESSAGES.has(error && error.message)
+        ? error.message
+        : 'Something went wrong. Press the button and try again.';
     }
   }
 
@@ -229,7 +297,11 @@ customElements.define('dj-visualizer', DJVisualizerSandbox);
 // keeps the music and the visuals.
 function ensureElement() {
   if (document.querySelector('dj-visualizer')) return;
-  document.body.appendChild(document.createElement('dj-visualizer'));
+  const rebuilt = document.createElement('dj-visualizer');
+  // Read by reportTypos, and set before the element is connected, because
+  // connecting it is what boots it.
+  rebuilt.rebuilt = true;
+  document.body.appendChild(rebuilt);
 }
 
 if (document.readyState === 'loading') {

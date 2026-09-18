@@ -207,7 +207,17 @@ async function sandboxPage(browser, base, fixture) {
   const page = await browser.newPage();
   const thrown = [];
   page.on('pageerror', (error) => thrown.push(error.message));
-  await page.goto(`${base}/test/fixtures/${fixture}`);
+  const response = await page.goto(`${base}/test/fixtures/${fixture}`);
+
+  // A 404 body is a page like any other: it throws nothing, boots nothing, and
+  // quietly passes every check phrased as "this did not happen". A renamed or
+  // missing fixture has to fail by name, here, before anything else runs.
+  check(
+    `${fixture} is served`,
+    !!response && response.ok(),
+    response ? `HTTP ${response.status()}` : 'no response'
+  );
+
   await page.waitForTimeout(700);
   return { page, thrown };
 }
@@ -235,7 +245,8 @@ const readSandbox = () => {
       ? document.querySelector('.sandbox-name').textContent
       : null,
     mediaType: el && el.visualizer ? el.visualizer.customMediaType : null,
-    hasMedia: !!(el && el.visualizer && el.visualizer.customMedia)
+    hasMedia: !!(el && el.visualizer && el.visualizer.customMedia),
+    title: document.title
   };
 };
 
@@ -355,10 +366,10 @@ async function colourWordTest(browser, base) {
 //   quote    — the closing " of gif="" is gone
 //   tag      — an element the student opened and never closed
 async function brokenMarkupTest(browser, base) {
-  for (const [label, fixture] of [
-    ['an unterminated comment', 'sandbox-broken-comment.html'],
-    ['an unclosed attribute quote', 'sandbox-broken-quote.html'],
-    ['an unclosed tag', 'sandbox-broken-tag.html']
+  for (const [label, fixture, costs] of [
+    ['an unterminated comment', 'sandbox-broken-comment.html', true],
+    ['an unclosed attribute quote', 'sandbox-broken-quote.html', true],
+    ['an unclosed tag', 'sandbox-broken-tag.html', false]
   ]) {
     const { page, thrown } = await sandboxPage(browser, base, fixture);
     const state = await page.evaluate(readSandbox);
@@ -368,8 +379,134 @@ async function brokenMarkupTest(browser, base) {
     check(`${label} still paints`, state.painted, JSON.stringify(state));
     check(`${label} still reads audio`, bass !== null && bass > 0.02, `bass ${bass}`);
 
+    // A rebuilt page looks exactly like a correct one. A student who loses
+    // their name to a missing quote mark learns that the name does not work,
+    // not that they made a typo, unless the rail says so.
+    if (costs) {
+      check(
+        `${label} tells the student what it cost`,
+        typeof state.status === 'string' && /quote mark/.test(state.status),
+        String(state.status)
+      );
+    } else {
+      check(
+        `${label} costs nothing and says nothing`,
+        state.status === 'Pick your music to start' && state.name === 'Broken Tag',
+        `${state.status} / ${state.name}`
+      );
+    }
+
     await page.close();
   }
+}
+
+// Every other broken fixture breaks the body. This one breaks the head: the
+// closing fence of the student's title comment is gone, so the comment runs to
+// the next fence in the body and swallows the <title> and the whole <style>
+// block on its way. The element itself survives, so the rebuild net never
+// fires — and all three colours used to come back white with nothing said,
+// which is the exact symptom the colour work existed to kill.
+async function brokenHeadCommentTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-broken-head-comment.html');
+  const state = await page.evaluate(readSandbox);
+  const bass = await page.evaluate(playFixtureTone, base);
+  const rgb = (name) => (state.colours ? String(state.colours[name]) : 'no colours');
+
+  check('a broken head comment throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('a broken head comment still paints', state.painted);
+  check('a broken head comment still reads audio', bass !== null && bass > 0.02, `bass ${bass}`);
+  check(
+    'a swallowed style block does not leave white bass',
+    rgb('bass') === '255,69,58',
+    rgb('bass')
+  );
+  check('a swallowed style block does not leave white mid', rgb('mid') === '48,209,88', rgb('mid'));
+  check(
+    'a swallowed style block does not leave white high',
+    rgb('high') === '10,132,255',
+    rgb('high')
+  );
+  check(
+    'a swallowed style block tells the student',
+    typeof state.status === 'string' && /colours/i.test(state.status),
+    String(state.status)
+  );
+
+  await page.close();
+}
+
+// A page that boots perfectly must stay quiet. A warning that appears on a
+// correct page trains a student to ignore the rail.
+async function quietWhenCorrectTest(browser, base) {
+  const { page } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const state = await page.evaluate(readSandbox);
+
+  check(
+    'a correct page says nothing about typos',
+    state.status === 'Pick your music to start',
+    String(state.status)
+  );
+
+  await page.close();
+}
+
+// Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
+// string", and the proxy fails for everything thrown inside attachStream —
+// a failed audioWorklet.addModule most of all. These two stubs are the two
+// sides of the rule: our own words survive, the browser's never appear.
+async function errorWordingTest(browser, base) {
+  const { page } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const OURS =
+    'That tab was shared without its sound. Try again and tick "Share tab audio" in the dialog.';
+  const BROWSER = 'Failed to load module script: Expected a JavaScript module script.';
+
+  const ourWords = await page.evaluate(async (message) => {
+    const el = window.djSandbox;
+    el.processor.startTabAudio = () => Promise.reject(new Error(message));
+    await el.useTab();
+    return document.querySelector('.sandbox-status').textContent;
+  }, OURS);
+
+  check('a message this project wrote survives', ourWords === OURS, ourWords);
+
+  const tabJargon = await page.evaluate(async (message) => {
+    const el = window.djSandbox;
+    el.processor.startTabAudio = () => Promise.reject(new DOMException(message, 'AbortError'));
+    await el.useTab();
+    return document.querySelector('.sandbox-status').textContent;
+  }, BROWSER);
+
+  check(
+    "the browser's words never reach the rail on the tab path",
+    !/module script/i.test(tabJargon) && tabJargon.length > 0,
+    tabJargon
+  );
+
+  const fileJargon = await page.evaluate(async (message) => {
+    const el = window.djSandbox;
+    el.processor.startFileAudio = () =>
+      Promise.reject(new DOMException(message, 'NotSupportedError'));
+    Object.defineProperty(el.fileInput, 'files', {
+      configurable: true,
+      get: () => [{ name: 'song.flac' }]
+    });
+    await el.useFile();
+    return document.querySelector('.sandbox-status').textContent;
+  }, BROWSER);
+
+  check(
+    "the browser's words never reach the rail on the file path",
+    !/module script/i.test(fileJargon),
+    fileJargon
+  );
+
+  check(
+    'a file the browser cannot play says what to try instead',
+    /MP3/.test(fileJargon),
+    fileJargon
+  );
+
+  await page.close();
 }
 
 // The third Done-when condition: a GIF that is not there must fail as a
@@ -437,6 +574,9 @@ try {
   await typoSafetyTest(browser, BASE);
   await colourWordTest(browser, BASE);
   await brokenMarkupTest(browser, BASE);
+  await brokenHeadCommentTest(browser, BASE);
+  await quietWhenCorrectTest(browser, BASE);
+  await errorWordingTest(browser, BASE);
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
 } finally {

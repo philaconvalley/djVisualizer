@@ -3,8 +3,10 @@
      The student's block-3 comment in the body is missing its closing fence, so
      the comment runs on and swallows the dj-visualizer element. engine.js has
      to rebuild it.
-     It lives here, not in sandbox/, because netlify.toml publishes the
-     repository root: a broken page under sandbox/ is a public page. -->
+     It lives here, not in sandbox/, so that a deliberately broken page is not
+     sitting in the directory students are pointed at, where it would read as
+     the page they were told to open. netlify.toml publishes the repository
+     root, so this file is served publicly either way. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />

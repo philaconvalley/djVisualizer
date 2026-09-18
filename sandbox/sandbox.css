@@ -53,9 +53,16 @@ dj-visualizer {
   padding: 10px 18px;
   font-size: 15px;
   cursor: pointer;
+  /* The rail tells a student what a typo cost them, and that sentence is long.
+     Without this the button gives up its width to the sentence and wraps onto
+     three lines. */
+  white-space: nowrap;
 }
 
 .sandbox-status {
+  margin-left: auto;
+  max-width: 44%;
+  text-align: right;
   color: rgba(235, 235, 245, 0.8);
   font-size: 13px;
 }
