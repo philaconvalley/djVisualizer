@@ -150,8 +150,22 @@ class DJVisualizerSandbox extends HTMLElement {
     }
     if (!notes.length) return;
 
-    notes.push('Look for a missing quote mark " or a note that never closes, then reload.');
-    this.status.textContent = notes.join(' ');
+    notes.push('Look for a missing quote mark, or a note with no closing arrow, then reload.');
+
+    // Kept, because the GIF's callback lands later and writes to the same line.
+    // A GIF that did not load is obvious from the stage; a name or a colour
+    // that came out wrong is not, so that explanation is the one that must
+    // survive the collision.
+    this.typoNote = notes.join(' ');
+    this.status.textContent = this.typoNote;
+  }
+
+  // Everything written into the rail before the student starts their music goes
+  // through here, so a second message joins the first instead of replacing it.
+  // Once they press play, useTab and useFile own the line and say what is
+  // playing.
+  say(text) {
+    this.status.textContent = this.typoNote ? this.typoNote + ' ' + text : text;
   }
 
   // Every hook DJVisualizer.init() reaches for without a null guard is built
@@ -231,7 +245,7 @@ class DJVisualizerSandbox extends HTMLElement {
         this.visualizer.customMediaType = 'image';
       },
       () => {
-        this.status.textContent = 'Could not find the GIF at "' + value + '". Check the name.';
+        this.say('Could not find the GIF at "' + value + '". Check the name.');
         this.modeSelect.value = chosen;
         this.visualizer.currentMode = chosen;
         this.visualizer.onModeChange('custom');

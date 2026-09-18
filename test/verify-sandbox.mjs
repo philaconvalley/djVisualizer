@@ -305,6 +305,99 @@ async function shippedTemplateTest(browser, base) {
     JSON.stringify(state.colours)
   );
 
+  // The instance this closes: a sentence in the student's closing fence
+  // contained a literal comment-closing arrow, so the comment ended early and
+  // the rest of it rendered as page text. It was invisible only because the
+  // canvas is absolutely positioned on top of it.
+  //
+  // The class this closes: every legitimate word on this page lives in the
+  // rail, and the stage holds a canvas and no text. So any text outside the
+  // rail is something that escaped a comment.
+  const stray = await page.evaluate(() => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const escaped = [];
+    let node = walker.nextNode();
+    while (node) {
+      const text = node.textContent.trim();
+      const inRail = node.parentElement && node.parentElement.closest('.sandbox-rail');
+      if (text && !inRail) escaped.push(text.slice(0, 80));
+      node = walker.nextNode();
+    }
+    return escaped;
+  });
+
+  check(
+    'the shipped template leaks no comment text into the page',
+    stray.length === 0,
+    stray.join(' | ')
+  );
+
+  await page.close();
+}
+
+// engine.js repeats the template's three colours so that a student whose whole
+// colour block is swallowed gets the shipped palette rather than three white
+// bands. Two copies of the same values drift: edit the template's --bass and
+// that student silently receives the old one, with nothing failing.
+//
+// The template on disk is the source of truth here. Writing the expected values
+// into this test a third time would be the same bug wearing a different hat, so
+// the values are read out of the file and compared against what the engine
+// actually restores on a page whose colour block is gone.
+async function paletteDriftTest(browser, base) {
+  const template = await readFile(join(ROOT, 'sandbox/index.html'), 'utf8');
+  const fromTemplate = {};
+  for (const name of ['bass', 'mid', 'high']) {
+    const found = template.match(new RegExp(`--${name}:\\s*#([0-9a-f]{6})`, 'i'));
+    if (found) {
+      const n = parseInt(found[1], 16);
+      fromTemplate[name] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(',');
+    }
+  }
+
+  check(
+    'the shipped template still declares three hex colours',
+    Object.keys(fromTemplate).length === 3,
+    JSON.stringify(fromTemplate)
+  );
+
+  // Its style block is swallowed by a broken comment, so every colour it shows
+  // came from engine.js's DEFAULT_PALETTE.
+  const { page } = await sandboxPage(browser, base, 'sandbox-broken-head-comment.html');
+  const state = await page.evaluate(readSandbox);
+
+  for (const name of ['bass', 'mid', 'high']) {
+    check(
+      `the fallback --${name} still matches the template`,
+      state.colours && String(state.colours[name]) === fromTemplate[name],
+      `engine ${state.colours && state.colours[name]} vs template ${fromTemplate[name]}`
+    );
+  }
+
+  await page.close();
+}
+
+// Two mistakes at once. Both messages go to the same line in the rail and the
+// GIF's callback lands last, so the GIF note used to erase the explanation for
+// the thing a student cannot work out on their own. A GIF that did not load is
+// obvious from the stage; a colour that came out wrong is not.
+async function twoMistakesTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-typo-and-gif.html');
+  const state = await page.evaluate(readSandbox);
+
+  check('a typo and a missing GIF throw nothing', thrown.length === 0, thrown.join(' | '));
+  check('a typo and a missing GIF still paint', state.painted);
+  check(
+    'the GIF note survives',
+    typeof state.status === 'string' && state.status.includes('nope.gif'),
+    String(state.status)
+  );
+  check(
+    'the typo warning survives beside it',
+    typeof state.status === 'string' && /colours/i.test(state.status),
+    String(state.status)
+  );
+
   await page.close();
 }
 
@@ -571,6 +664,8 @@ try {
   // Each of these boots a whole sandbox page, so each one gets its own.
   await elementBootTest(browser, BASE);
   await shippedTemplateTest(browser, BASE);
+  await paletteDriftTest(browser, BASE);
+  await twoMistakesTest(browser, BASE);
   await typoSafetyTest(browser, BASE);
   await colourWordTest(browser, BASE);
   await brokenMarkupTest(browser, BASE);
