@@ -125,6 +125,75 @@ async function fileTeardownTest(page) {
   );
 }
 
+// getDisplayMedia opens a native dialog Playwright cannot touch, so the
+// browser's half is stubbed and this repository's half is tested in full.
+// The real dialog is exercised by hand with sandbox/probe.html. Anything
+// this stub hides is named in the spec, §9.
+async function tabCaptureTest(page) {
+  const outcome = await page.evaluate(async () => {
+    const context = new AudioContext();
+    const destination = context.createMediaStreamDestination();
+    const oscillator = context.createOscillator();
+    oscillator.frequency.value = 100;
+    oscillator.connect(destination);
+    oscillator.start();
+
+    let asked = null;
+    navigator.mediaDevices.getDisplayMedia = (options) => {
+      asked = options;
+      return Promise.resolve(destination.stream);
+    };
+
+    const processor = new AudioProcessor();
+    await processor.startTabAudio();
+    await new Promise((r) => setTimeout(r, 1200));
+    const data = processor.getAudioData();
+    processor.stop();
+    context.close();
+    return { asked, bass: data.bass, high: data.high };
+  });
+
+  check(
+    'startTabAudio asks for video and audio',
+    outcome.asked && outcome.asked.audio === true && outcome.asked.video === true,
+    JSON.stringify(outcome.asked)
+  );
+
+  check(
+    'startTabAudio drives the bands from the shared stream',
+    outcome.bass > 0.02 && outcome.bass > outcome.high,
+    `bass ${outcome.bass.toFixed(3)}, high ${outcome.high.toFixed(3)}`
+  );
+}
+
+// The commonest real failure is not a refusal. It is a student who shares the
+// right tab and forgets to tick "Share tab audio". The message has to say so.
+async function tabCaptureNoAudioTest(page) {
+  const message = await page.evaluate(async () => {
+    const context = new AudioContext();
+    const canvas = document.createElement('canvas');
+    const videoOnly = canvas.captureStream(1);
+
+    navigator.mediaDevices.getDisplayMedia = () => Promise.resolve(videoOnly);
+
+    const processor = new AudioProcessor();
+    try {
+      await processor.startTabAudio();
+      context.close();
+      return null;
+    } catch (error) {
+      context.close();
+      return error.message;
+    }
+  });
+
+  check(
+    'a tab shared without audio gives an instructive message',
+    typeof message === 'string' && /share tab audio/i.test(message),
+    message === null ? 'no error was thrown' : message
+  );
+}
+
 const server = await serve();
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 try {
@@ -136,6 +205,8 @@ try {
   await seamTest(page);
   await fileSourceTest(page);
   await fileTeardownTest(page);
+  await tabCaptureTest(page);
+  await tabCaptureNoAudioTest(page);
 } finally {
   await browser.close();
   server.close();

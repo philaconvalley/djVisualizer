@@ -502,6 +502,52 @@ class AudioProcessor {
     }
   }
 
+  // The student's own song, captured from a tab playing it. This is the only
+  // way a browser can analyse audio from a site it does not own: the embed
+  // itself is cross-origin and unreachable, so the sound is taken after it
+  // leaves the player rather than from inside it. PHI-223.
+  //
+  // Streaming services are out of reach even this way. Their audio is DRM
+  // protected and Chrome refuses to capture it, so the shared tab arrives
+  // silent. YouTube carries no DRM on standard videos and does arrive.
+  async startTabAudio() {
+    this.stop();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      throw new Error('This browser cannot share a tab. Use Chrome, or pick a song file instead.');
+    }
+
+    let stream;
+    try {
+      // Audio-only capture is not offered by any browser: the picker is a
+      // screen picker, so video must be requested to get the audio beside it.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        throw new Error('No tab was shared. Press the button again and choose your music tab.', {
+          cause: error
+        });
+      }
+      throw new Error('Could not share a tab: ' + error.message, { cause: error });
+    }
+
+    if (stream.getAudioTracks().length === 0) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error(
+        'That tab was shared without its sound. Try again and tick "Share tab audio" in the dialog.'
+      );
+    }
+
+    // Nothing here draws the tab, and an unread video track keeps an encoder
+    // running for the length of the set.
+    stream.getVideoTracks().forEach((track) => {
+      track.stop();
+      stream.removeTrack(track);
+    });
+
+    await this.attachStream(stream);
+  }
+
   // A song the student chose, from a file or a URL. Unlike the microphone and
   // the shared tab, this source is also routed to the speakers — the student
   // has to hear what they are watching. The microphone path must never do
