@@ -433,6 +433,62 @@ class AudioProcessor {
     }
   }
 
+  // The graph half of starting audio, with no opinion about where the stream
+  // came from. A microphone, a shared tab, and a media element all arrive here
+  // as the same MediaStream, so the analyser, the band math, and the beat
+  // detector have exactly one implementation. Splitting this out is what let
+  // the student sandbox add two sources without touching any of that. PHI-223.
+  //
+  // Errors are NOT translated here. startAudio owns the microphone wording,
+  // because "Microphone access denied" is a lie when the user declined a tab.
+  async attachStream(stream) {
+    this.stream = stream;
+
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    this.sourceNode = this.audioContext.createMediaStreamSource(stream);
+
+    // Configure analyser for stable performance
+    this.analyserNode = this.audioContext.createAnalyser();
+    // 2048 puts bin width near 23 Hz at 48 kHz, which gives the 20–250 Hz bass
+    // band about ten bins to work with instead of five. At 1024 the band the
+    // whole beat detector keys off was resolved more coarsely than it is wide.
+    // The cost is a ~43 ms analysis window, still short enough to feel live.
+    this.analyserNode.fftSize = 2048;
+    this.analyserNode.smoothingTimeConstant = 0.3;
+    this.analyserNode.minDecibels = -90;
+    this.analyserNode.maxDecibels = -10;
+
+    this.sourceNode.connect(this.analyserNode);
+    await this.startKickWorklet();
+
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    this.dataArray = new Uint8Array(bufferLength);
+    this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
+    this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
+    this.silentSince = null;
+    this.reportedErrors.clear();
+
+    this.rms = this.bass = this.mid = this.high = 0;
+
+    // Analysis runs on its own clock, not on requestAnimationFrame. Chained
+    // to rAF it inherited the renderer's frame rate, so a heavy visualization
+    // or a warm laptop starved the beat detector of samples — the failure got
+    // worse precisely as the machine got busier. Listening is not drawing and
+    // must not be throttled by it.
+    this.isRunning = true;
+    this.lastAnalysisAt = 0;
+    this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
+    this.updateAudioData();
+
+    if (DEBUG) {
+      console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
+    }
+  }
+
   async startAudio(deviceId = null) {
     try {
       // Stop any existing audio first
@@ -483,54 +539,7 @@ class AudioProcessor {
         }
       }
 
-      // Store stream for cleanup
-      this.stream = stream;
-
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
-      }
-
-      this.sourceNode = this.audioContext.createMediaStreamSource(stream);
-
-      // Configure analyser for stable performance
-      this.analyserNode = this.audioContext.createAnalyser();
-      // 2048 puts bin width near 23 Hz at 48 kHz, which gives the 20–250 Hz bass
-      // band about ten bins to work with instead of five. At 1024 the band the
-      // whole beat detector keys off was resolved more coarsely than it is wide.
-      // The cost is a ~43 ms analysis window, still short enough to feel live.
-      this.analyserNode.fftSize = 2048;
-      this.analyserNode.smoothingTimeConstant = 0.3; // Less smoothing for more responsive visuals
-      this.analyserNode.minDecibels = -90;
-      this.analyserNode.maxDecibels = -10;
-
-      this.sourceNode.connect(this.analyserNode);
-      await this.startKickWorklet();
-
-      // Initialize data arrays
-      const bufferLength = this.analyserNode.frequencyBinCount;
-      this.dataArray = new Uint8Array(bufferLength);
-      this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
-      this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
-      this.silentSince = null;
-      this.reportedErrors.clear();
-
-      // Reset audio values
-      this.rms = this.bass = this.mid = this.high = 0;
-
-      // Analysis runs on its own clock, not on requestAnimationFrame. Chained
-      // to rAF it inherited the renderer's frame rate, so a heavy visualization
-      // or a warm laptop starved the beat detector of samples — the failure got
-      // worse precisely as the machine got busier. Listening is not drawing and
-      // must not be throttled by it.
-      this.isRunning = true;
-      this.lastAnalysisAt = 0;
-      this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
-      this.updateAudioData();
-
-      if (DEBUG) {
-        console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
-      }
+      await this.attachStream(stream);
     } catch (error) {
       this.isRunning = false;
       console.error('Audio start error:', error);

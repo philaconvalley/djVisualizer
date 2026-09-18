@@ -72,7 +72,13 @@ export default [
   {
     files: ['test/**/*.mjs'],
     languageOptions: {
-      globals: { ...globals.node, ...globals.browser, djApp: 'readonly', hw: 'readonly' }
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+        djApp: 'readonly',
+        hw: 'readonly',
+        AudioProcessor: 'readonly'
+      }
     }
   },
 
