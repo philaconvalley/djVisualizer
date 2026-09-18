@@ -83,6 +83,48 @@ async function seamTest(page) {
   );
 }
 
+// The file path has to light the same bands as the microphone path for the
+// same audio. tone-100hz.wav is a pure 100 Hz tone, which sits squarely in
+// the 20–250 Hz bass band and nowhere else.
+async function fileSourceTest(page) {
+  const reading = await page.evaluate(async (base) => {
+    const processor = new AudioProcessor();
+    await processor.startFileAudio(base + '/test/fixtures/tone-100hz.wav');
+    await new Promise((r) => setTimeout(r, 1500));
+    const data = processor.getAudioData();
+    processor.stop();
+    return data;
+  }, BASE);
+
+  check(
+    'startFileAudio lights bass for a 100 Hz tone',
+    reading.bass > 0.02 && reading.bass > reading.high,
+    `bass ${reading.bass.toFixed(3)}, high ${reading.high.toFixed(3)}`
+  );
+}
+
+// stop() has to release the element and revoke its object URL, or a student
+// switching tracks ten times leaks ten decoded files.
+async function fileTeardownTest(page) {
+  const state = await page.evaluate(async (base) => {
+    const processor = new AudioProcessor();
+    await processor.startFileAudio(base + '/test/fixtures/tone-1khz.wav');
+    await new Promise((r) => setTimeout(r, 400));
+    processor.stop();
+    return {
+      element: processor.mediaElement,
+      url: processor.mediaElementURL,
+      running: processor.isRunning
+    };
+  }, BASE);
+
+  check(
+    'stop() releases the media element',
+    state.element === null && state.url === null && state.running === false,
+    JSON.stringify(state)
+  );
+}
+
 const server = await serve();
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 try {
@@ -92,6 +134,8 @@ try {
   await page.addScriptTag({ url: `${BASE}/app/audioProcessor.js` });
 
   await seamTest(page);
+  await fileSourceTest(page);
+  await fileTeardownTest(page);
 } finally {
   await browser.close();
   server.close();

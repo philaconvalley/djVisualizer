@@ -98,6 +98,11 @@ class AudioProcessor {
     this.sourceNode = null;
     this.analyserNode = null;
 
+    // Media element source, used by the student sandbox's file path. Null on
+    // the microphone and tab paths.
+    this.mediaElement = null;
+    this.mediaElementURL = null;
+
     // Audio processing properties
     this.rms = 0;
     this.bass = 0;
@@ -497,6 +502,63 @@ class AudioProcessor {
     }
   }
 
+  // A song the student chose, from a file or a URL. Unlike the microphone and
+  // the shared tab, this source is also routed to the speakers — the student
+  // has to hear what they are watching. The microphone path must never do
+  // this; it would feed the room back into itself.
+  //
+  // A media element is not a MediaStream, so this builds the graph directly
+  // rather than going through attachStream. Everything downstream of the
+  // analyser is identical. PHI-223.
+  async startFileAudio(source) {
+    this.stop();
+
+    const url = typeof source === 'string' ? source : URL.createObjectURL(source);
+    if (typeof source !== 'string') this.mediaElementURL = url;
+
+    const element = new Audio();
+    element.crossOrigin = 'anonymous';
+    element.loop = true;
+    element.src = url;
+    this.mediaElement = element;
+
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    this.sourceNode = this.audioContext.createMediaElementSource(element);
+
+    this.analyserNode = this.audioContext.createAnalyser();
+    this.analyserNode.fftSize = 2048;
+    this.analyserNode.smoothingTimeConstant = 0.3;
+    this.analyserNode.minDecibels = -90;
+    this.analyserNode.maxDecibels = -10;
+
+    this.sourceNode.connect(this.analyserNode);
+    this.sourceNode.connect(this.audioContext.destination);
+    await this.startKickWorklet();
+
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    this.dataArray = new Uint8Array(bufferLength);
+    this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
+    this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
+    this.silentSince = null;
+    this.reportedErrors.clear();
+    this.rms = this.bass = this.mid = this.high = 0;
+
+    await element.play();
+
+    this.isRunning = true;
+    this.lastAnalysisAt = 0;
+    this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
+    this.updateAudioData();
+
+    if (DEBUG) console.log('File audio started:', url);
+
+    return element;
+  }
+
   async startAudio(deviceId = null) {
     try {
       // Stop any existing audio first
@@ -584,6 +646,19 @@ class AudioProcessor {
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
+    }
+
+    // Media element source, if the file path was used.
+    if (this.mediaElement) {
+      this.mediaElement.pause();
+      this.mediaElement.removeAttribute('src');
+      this.mediaElement.load();
+      this.mediaElement = null;
+    }
+
+    if (this.mediaElementURL) {
+      URL.revokeObjectURL(this.mediaElementURL);
+      this.mediaElementURL = null;
     }
 
     // Disconnect and clean up audio nodes
