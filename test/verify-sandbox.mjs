@@ -194,6 +194,80 @@ async function tabCaptureNoAudioTest(page) {
   );
 }
 
+// The element has to build every DOM hook DJVisualizer.init() reaches for
+// without a guard. Missing any one of them throws during boot, and a student
+// sees a black page with no explanation.
+async function elementBootTest(page) {
+  const state = await page.evaluate(() => {
+    const el = document.querySelector('dj-visualizer');
+    return {
+      stage: !!document.querySelector('.stage'),
+      canvasHost: !!document.getElementById('p5-canvas'),
+      modeSelect: !!document.getElementById('visualMode'),
+      canvasDrawn: !!document.querySelector('.stage canvas'),
+      mode: el && el.visualizer ? el.visualizer.currentMode : null,
+      name: document.querySelector('.sandbox-name')
+        ? document.querySelector('.sandbox-name').textContent
+        : null
+    };
+  });
+
+  check('the element builds .stage', state.stage);
+  check('the element builds #p5-canvas', state.canvasHost);
+  check('the element builds #visualMode', state.modeSelect);
+  check('p5 created a canvas', state.canvasDrawn);
+  check('the mode attribute is applied', state.mode === 'rings', String(state.mode));
+  check('the dj-name attribute is shown', state.name === 'TEST DJ', String(state.name));
+}
+
+// The ticket's second condition, made executable: a typo in the block a
+// student edits must not stop the audio or the visuals.
+//
+// The typos live in a committed fixture page rather than being injected after
+// load. readPalette() runs once inside init(), so a stylesheet added after
+// page.goto() arrives too late to be read and the assertion would pass
+// whether the fallback worked or not. A student's typo is in their file
+// before the page boots, and so is this one.
+async function typoSafetyTest(browser, base) {
+  const page = await browser.newPage();
+  const thrown = [];
+  page.on('pageerror', (error) => thrown.push(error.message));
+
+  await page.goto(`${base}/sandbox/typo-fixture.html`);
+  await page.waitForTimeout(600);
+
+  const state = await page.evaluate(async (b) => {
+    const el = window.djSandbox;
+    await el.processor.startFileAudio(b + '/test/fixtures/tone-100hz.wav');
+    await new Promise((r) => setTimeout(r, 1200));
+    const data = el.processor.getAudioData();
+    const canvas = document.querySelector('.stage canvas');
+    el.processor.stop();
+    return {
+      bass: data.bass,
+      mode: el.visualizer.currentMode,
+      colours: el.visualizer.colors,
+      painted: !!canvas && canvas.width > 0
+    };
+  }, base);
+
+  check('a bad colour and a bad mode throw nothing', thrown.length === 0, thrown.join(' | '));
+  check('the visuals still paint', state.painted);
+  check('the audio still reads', state.bass > 0.02, `bass ${state.bass.toFixed(3)}`);
+  check(
+    'a nonsense mode falls back rather than blanking',
+    state.mode === 'flow',
+    String(state.mode)
+  );
+  check(
+    'an unparseable colour keeps a usable value',
+    Array.isArray(state.colours.bass) && state.colours.bass.length === 3,
+    JSON.stringify(state.colours.bass)
+  );
+
+  await page.close();
+}
+
 const server = await serve();
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 try {
@@ -207,6 +281,17 @@ try {
   await fileTeardownTest(page);
   await tabCaptureTest(page);
   await tabCaptureNoAudioTest(page);
+
+  // The element tests need a real sandbox page, not the bare probe. They also
+  // need a page whose getDisplayMedia is not still stubbed by the two tab
+  // tests above, which never restore it.
+  const sandbox = await browser.newPage();
+  sandbox.on('pageerror', (error) => check('sandbox page threw', false, error.message));
+  await sandbox.goto(`${BASE}/sandbox/index.html?mode=rings&name=TEST%20DJ`);
+  await sandbox.waitForTimeout(600);
+  await elementBootTest(sandbox);
+
+  await typoSafetyTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();

@@ -1,0 +1,61 @@
+/* The sandbox's own chrome. The stage itself is styled by the tokens the
+   student edits, so nothing here sets a band colour. */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--stage, #000);
+  color: #fff;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+dj-visualizer {
+  display: block;
+  height: 100%;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.sandbox-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  background: rgba(28, 28, 30, 0.86);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.sandbox-name {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sandbox-rail button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.sandbox-status {
+  color: rgba(235, 235, 245, 0.8);
+  font-size: 13px;
+}
