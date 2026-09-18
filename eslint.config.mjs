@@ -67,8 +67,8 @@ export default [
   },
 
   // Test drivers run in Node, but code inside page.evaluate() callbacks runs
-  // in the page, where the app's globals exist. Only the two globals those
-  // callbacks read are declared, so a typo on the Node side still fails.
+  // in the page, where the app's globals exist. Only the globals those
+  // callbacks actually read are declared, so a typo on the Node side still fails.
   {
     files: ['test/**/*.mjs'],
     languageOptions: {

@@ -442,6 +442,14 @@ class AudioProcessor {
   // Errors are NOT translated here. startAudio owns the microphone wording,
   // because "Microphone access denied" is a lie when the user declined a tab.
   async attachStream(stream) {
+    // A public, source-agnostic entry point cannot assume its caller already
+    // tore down the last session. startAudio always calls stop() first, but
+    // the tab-capture and file sources landing in later tasks call this
+    // directly — without this guard, a second call would orphan the old
+    // AudioContext, leave its 60 Hz analysis timer running forever, and
+    // never stop the previous stream's tracks.
+    if (this.isRunning) this.stop();
+
     this.stream = stream;
 
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
