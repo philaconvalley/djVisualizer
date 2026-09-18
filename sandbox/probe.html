@@ -99,7 +99,17 @@
 
         $('result').textContent = 'stream attached — watching for signal';
 
-        setInterval(() => {
+        let pollingIntervalId;
+        let watchdogTimeoutId = setTimeout(() => {
+          if (best <= 0.001) {
+            $('result').textContent =
+              'FAIL — the tab was shared with audio enabled, but no sound reached the analyser. The song may be paused, the tab may be muted, or this platform delivered a silent audio track.';
+            clearInterval(pollingIntervalId);
+            stream.getTracks().forEach((t) => t.stop());
+          }
+        }, 10000);
+
+        pollingIntervalId = setInterval(() => {
           analyser.getFloatTimeDomainData(samples);
           let peak = 0;
           for (let i = 0; i < samples.length; i++) {
@@ -111,6 +121,9 @@
           $('peak').textContent = peak.toFixed(4) + '  (best ' + best.toFixed(4) + ')';
           if (best > 0.001) {
             $('result').textContent = 'PASS — tab audio reached the analyser';
+            clearTimeout(watchdogTimeoutId);
+            clearInterval(pollingIntervalId);
+            stream.getTracks().forEach((t) => t.stop());
           }
         }, 100);
       });
