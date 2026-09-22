@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- TEST FIXTURE for test/verify-sandbox.mjs. KEEP THE UNCLOSED QUOTE. The closing double quote of gif="" is
+     missing, on purpose, so the attribute value runs to the end of the file.
+     It lives here, not in sandbox/, so that a deliberately broken page is not
+     sitting in the directory students are pointed at, where it would read as
+     the page they were told to open. netlify.toml publishes the repository
+     root, so this file is served publicly either way. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script src="../../app/audioProcessor.js"></script>
+    <script src="../../app/visualizer.js"></script>
+    <script src="../../sandbox/engine.js"></script>
+
+    <title>Sandbox fixture</title>
+
+    <style>
+      :root {
+        --bass: #ff453a;
+        --mid: #30d158;
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <dj-visualizer dj-name="Broken Quote" mode="rings" gif=">
+  </body>
+</html>

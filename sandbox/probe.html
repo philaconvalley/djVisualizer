@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tab audio probe</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #000;
+        color: #fff;
+        font-family: system-ui, sans-serif;
+      }
+      button {
+        font-size: 18px;
+        padding: 12px 20px;
+        border-radius: 999px;
+        border: 0;
+        cursor: pointer;
+      }
+      #meter {
+        height: 24px;
+        background: #30d158;
+        width: 0;
+        transition: width 80ms linear;
+      }
+      dt {
+        color: rgba(235, 235, 245, 0.58);
+        font-size: 13px;
+      }
+      dd {
+        margin: 0 0 12px;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tab audio probe</h1>
+    <p>
+      Play a song in another Chrome tab. Press the button, choose that tab, and tick
+      <strong>Share tab audio</strong>. The bar moves if the audio reached the analyser.
+    </p>
+    <button id="share" type="button">Share a tab</button>
+    <div id="meter" aria-hidden="true"></div>
+    <dl>
+      <dt>Result</dt>
+      <dd id="result">not started</dd>
+      <dt>Audio tracks</dt>
+      <dd id="tracks">&mdash;</dd>
+      <dt>Track label</dt>
+      <dd id="label">&mdash;</dd>
+      <dt>Sample rate</dt>
+      <dd id="rate">&mdash;</dd>
+      <dt>Peak level</dt>
+      <dd id="peak">&mdash;</dd>
+    </dl>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      $('share').addEventListener('click', async () => {
+        $('result').textContent = 'asking...';
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+          $('result').textContent = 'FAIL — getDisplayMedia is not available in this browser';
+          return;
+        }
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        } catch (error) {
+          $('result').textContent = 'FAIL — ' + error.name + ': ' + error.message;
+          return;
+        }
+
+        const audio = stream.getAudioTracks();
+        $('tracks').textContent = String(audio.length);
+
+        if (audio.length === 0) {
+          $('result').textContent =
+            'FAIL — the tab was shared but carried no audio track. "Share tab audio" was off, or this platform does not offer it.';
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        $('label').textContent = audio[0].label || '(no label)';
+
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        await context.resume();
+        $('rate').textContent = context.sampleRate + ' Hz';
+
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048;
+        context.createMediaStreamSource(stream).connect(analyser);
+
+        const samples = new Float32Array(analyser.fftSize);
+        let best = 0;
+
+        $('result').textContent = 'stream attached — watching for signal';
+
+        let pollingIntervalId;
+        let watchdogTimeoutId = setTimeout(() => {
+          if (best <= 0.001) {
+            $('result').textContent =
+              'FAIL — the tab was shared with audio enabled, but no sound reached the analyser. The song may be paused, the tab may be muted, or this platform delivered a silent audio track.';
+            clearInterval(pollingIntervalId);
+            stream.getTracks().forEach((t) => t.stop());
+          }
+        }, 10000);
+
+        pollingIntervalId = setInterval(() => {
+          analyser.getFloatTimeDomainData(samples);
+          let peak = 0;
+          for (let i = 0; i < samples.length; i++) {
+            const v = Math.abs(samples[i]);
+            if (v > peak) peak = v;
+          }
+          best = Math.max(best, peak);
+          $('meter').style.width = Math.min(100, peak * 100) + '%';
+          $('peak').textContent = peak.toFixed(4) + '  (best ' + best.toFixed(4) + ')';
+          if (best > 0.001) {
+            $('result').textContent = 'PASS — tab audio reached the analyser';
+            clearTimeout(watchdogTimeoutId);
+            clearInterval(pollingIntervalId);
+            stream.getTracks().forEach((t) => t.stop());
+          }
+        }, 100);
+      });
+    </script>
+  </body>
+</html>

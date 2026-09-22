@@ -20,7 +20,11 @@ These are distinct surfaces with opposite requirements, and the distinction is d
 
 ## Product Purpose
 
-Real-time audio visualization for live DJ performance, driven by live hardware input rather than audio files. Success for the primary user is that a developer can clone it, run it, understand the audio-to-visual pipeline, and add a visualization mode. Success for the installation is that a passerby grasps the sound-to-image relationship without being told.
+Real-time audio visualization for live DJ performance. **The live application reads hardware input only.** No file, no track, no transport. The operator plugs in and presses Start.
+
+**The student sandbox is the exception**, and it is a different product for a different user. A student in a workshop has no mixer and no controller, so the sandbox accepts a shared browser tab or a song file. Everything below the source — the bands, the beat detection, the ten modes — is shared. The exception is the source, and only the source.
+
+Success for the primary user is that a developer can clone it, run it, understand the audio-to-visual pipeline, and add a visualization mode. Success for the installation is that a passerby grasps the sound-to-image relationship without being told.
 
 ## Positioning
 

@@ -7,8 +7,13 @@ A web-based audio visualizer for DJs, built with plain JavaScript and the Web
 Audio API. It listens to **live audio input from your hardware** — a controller,
 a mixer, or a microphone — and turns it into projected visuals in real time.
 
-It does not play audio files. There is no file to load and no track to select:
-you plug in, press Start, and it reads the room.
+The live application does not play audio files. There is no file to load and no track to
+select: you plug in, press Start, and it reads the room.
+
+The student sandbox at `sandbox/` is the exception, and it exists for a different user. A
+student has no mixer, so it takes audio from a shared browser tab or from a song file. It
+uses the same analyser, the same bands, and the same beat detection. See
+[the design spec](docs/superpowers/specs/2026-09-18-student-sandbox-design.md).
 
 Performed live at [Indy Hall](https://www.indyhall.org/) in Philadelphia, driving
 real-time visuals off a Pioneer DDJ-REV1 in front of an audience.
@@ -93,6 +98,18 @@ stylesheet the page references comes back as that kind of file, rather than as
 `index.html` with a 200. Runs automatically on every deploy and every six hours.
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+```sh
+npm run verify:sandbox
+```
+
+Checks the student sandbox: that the audio graph works from any source, that a song file
+drives the bands, and that a typo in the block a student edits stops neither the audio nor
+the visuals. Tab capture is tested in two halves. The suite stubs the picker `getDisplayMedia`
+opens and proves this repository's own logic against it — the options it requests, the video
+track it discards, and the message a student gets if they share a tab without ticking "Share
+tab audio". Only the native picker itself falls outside a test driver's reach, so that part is
+checked by hand with `sandbox/probe.html`.
+
 ## Controls
 
 | Key | Action |
@@ -121,6 +138,12 @@ app/
   visualizer.js         All ten modes, one shared stage grammar
 styles/styles.css       Design tokens and console styling
 vendor/p5.min.js        Vendored p5 1.9.0 — never a CDN
+sandbox/
+  index.html            Student template — HTML and CSS only
+  engine.js             <dj-visualizer> element, config-driven boot
+  sandbox.css           Sandbox chrome
+  probe.html            Manual probe for tab audio capture
+docs/workshop/          Edit ladder and station links
 docs/screenshots/       Demo GIF and mode screenshots used by this README
 test/                   Verification harness (see CONTRIBUTING.md)
 package.json            devDependencies and scripts for the harness only

@@ -98,6 +98,11 @@ class AudioProcessor {
     this.sourceNode = null;
     this.analyserNode = null;
 
+    // Media element source, used by the student sandbox's file path. Null on
+    // the microphone and tab paths.
+    this.mediaElement = null;
+    this.mediaElementURL = null;
+
     // Audio processing properties
     this.rms = 0;
     this.bass = 0;
@@ -433,6 +438,173 @@ class AudioProcessor {
     }
   }
 
+  // The graph half of starting audio, with no opinion about where the stream
+  // came from. A microphone, a shared tab, and a media element all arrive here
+  // as the same MediaStream, so the analyser, the band math, and the beat
+  // detector have exactly one implementation. Splitting this out is what let
+  // the student sandbox add two sources without touching any of that. PHI-223.
+  //
+  // Errors are NOT translated here. startAudio owns the microphone wording,
+  // because "Microphone access denied" is a lie when the user declined a tab.
+  async attachStream(stream) {
+    // A public, source-agnostic entry point cannot assume its caller already
+    // tore down the last session. startAudio always calls stop() first, but
+    // the tab-capture and file sources landing in later tasks call this
+    // directly — without this guard, a second call would orphan the old
+    // AudioContext, leave its 60 Hz analysis timer running forever, and
+    // never stop the previous stream's tracks.
+    if (this.isRunning) this.stop();
+
+    this.stream = stream;
+
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    this.sourceNode = this.audioContext.createMediaStreamSource(stream);
+
+    // Configure analyser for stable performance
+    this.analyserNode = this.audioContext.createAnalyser();
+    // 2048 puts bin width near 23 Hz at 48 kHz, which gives the 20–250 Hz bass
+    // band about ten bins to work with instead of five. At 1024 the band the
+    // whole beat detector keys off was resolved more coarsely than it is wide.
+    // The cost is a ~43 ms analysis window, still short enough to feel live.
+    this.analyserNode.fftSize = 2048;
+    this.analyserNode.smoothingTimeConstant = 0.3;
+    this.analyserNode.minDecibels = -90;
+    this.analyserNode.maxDecibels = -10;
+
+    this.sourceNode.connect(this.analyserNode);
+    await this.startKickWorklet();
+
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    this.dataArray = new Uint8Array(bufferLength);
+    this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
+    this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
+    this.silentSince = null;
+    this.reportedErrors.clear();
+
+    this.rms = this.bass = this.mid = this.high = 0;
+
+    // Analysis runs on its own clock, not on requestAnimationFrame. Chained
+    // to rAF it inherited the renderer's frame rate, so a heavy visualization
+    // or a warm laptop starved the beat detector of samples — the failure got
+    // worse precisely as the machine got busier. Listening is not drawing and
+    // must not be throttled by it.
+    this.isRunning = true;
+    this.lastAnalysisAt = 0;
+    this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
+    this.updateAudioData();
+
+    if (DEBUG) {
+      console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
+    }
+  }
+
+  // The student's own song, captured from a tab playing it. This is the only
+  // way a browser can analyse audio from a site it does not own: the embed
+  // itself is cross-origin and unreachable, so the sound is taken after it
+  // leaves the player rather than from inside it. PHI-223.
+  //
+  // Streaming services are out of reach even this way. Their audio is DRM
+  // protected and Chrome refuses to capture it, so the shared tab arrives
+  // silent. YouTube carries no DRM on standard videos and does arrive.
+  async startTabAudio() {
+    this.stop();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      throw new Error('This browser cannot share a tab. Use Chrome, or pick a song file instead.');
+    }
+
+    let stream;
+    try {
+      // Audio-only capture is not offered by any browser: the picker is a
+      // screen picker, so video must be requested to get the audio beside it.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        throw new Error('No tab was shared. Press the button again and choose your music tab.', {
+          cause: error
+        });
+      }
+      throw new Error('Could not share a tab: ' + error.message, { cause: error });
+    }
+
+    if (stream.getAudioTracks().length === 0) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw new Error(
+        'That tab was shared without its sound. Try again and tick "Share tab audio" in the dialog.'
+      );
+    }
+
+    // Nothing here draws the tab, and an unread video track keeps an encoder
+    // running for the length of the set.
+    stream.getVideoTracks().forEach((track) => {
+      track.stop();
+      stream.removeTrack(track);
+    });
+
+    await this.attachStream(stream);
+  }
+
+  // A song the student chose, from a file or a URL. Unlike the microphone and
+  // the shared tab, this source is also routed to the speakers — the student
+  // has to hear what they are watching. The microphone path must never do
+  // this; it would feed the room back into itself.
+  //
+  // A media element is not a MediaStream, so this builds the graph directly
+  // rather than going through attachStream. Everything downstream of the
+  // analyser is identical. PHI-223.
+  async startFileAudio(source) {
+    this.stop();
+
+    const url = typeof source === 'string' ? source : URL.createObjectURL(source);
+    if (typeof source !== 'string') this.mediaElementURL = url;
+
+    const element = new Audio();
+    element.crossOrigin = 'anonymous';
+    element.loop = true;
+    element.src = url;
+    this.mediaElement = element;
+
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    this.sourceNode = this.audioContext.createMediaElementSource(element);
+
+    this.analyserNode = this.audioContext.createAnalyser();
+    this.analyserNode.fftSize = 2048;
+    this.analyserNode.smoothingTimeConstant = 0.3;
+    this.analyserNode.minDecibels = -90;
+    this.analyserNode.maxDecibels = -10;
+
+    this.sourceNode.connect(this.analyserNode);
+    this.sourceNode.connect(this.audioContext.destination);
+    await this.startKickWorklet();
+
+    const bufferLength = this.analyserNode.frequencyBinCount;
+    this.dataArray = new Uint8Array(bufferLength);
+    this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
+    this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
+    this.silentSince = null;
+    this.reportedErrors.clear();
+    this.rms = this.bass = this.mid = this.high = 0;
+
+    await element.play();
+
+    this.isRunning = true;
+    this.lastAnalysisAt = 0;
+    this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
+    this.updateAudioData();
+
+    if (DEBUG) console.log('File audio started:', url);
+
+    return element;
+  }
+
   async startAudio(deviceId = null) {
     try {
       // Stop any existing audio first
@@ -483,54 +655,7 @@ class AudioProcessor {
         }
       }
 
-      // Store stream for cleanup
-      this.stream = stream;
-
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
-      }
-
-      this.sourceNode = this.audioContext.createMediaStreamSource(stream);
-
-      // Configure analyser for stable performance
-      this.analyserNode = this.audioContext.createAnalyser();
-      // 2048 puts bin width near 23 Hz at 48 kHz, which gives the 20–250 Hz bass
-      // band about ten bins to work with instead of five. At 1024 the band the
-      // whole beat detector keys off was resolved more coarsely than it is wide.
-      // The cost is a ~43 ms analysis window, still short enough to feel live.
-      this.analyserNode.fftSize = 2048;
-      this.analyserNode.smoothingTimeConstant = 0.3; // Less smoothing for more responsive visuals
-      this.analyserNode.minDecibels = -90;
-      this.analyserNode.maxDecibels = -10;
-
-      this.sourceNode.connect(this.analyserNode);
-      await this.startKickWorklet();
-
-      // Initialize data arrays
-      const bufferLength = this.analyserNode.frequencyBinCount;
-      this.dataArray = new Uint8Array(bufferLength);
-      this.timeDataArray = new Uint8Array(this.analyserNode.fftSize);
-      this.floatTimeData = new Float32Array(this.analyserNode.fftSize);
-      this.silentSince = null;
-      this.reportedErrors.clear();
-
-      // Reset audio values
-      this.rms = this.bass = this.mid = this.high = 0;
-
-      // Analysis runs on its own clock, not on requestAnimationFrame. Chained
-      // to rAF it inherited the renderer's frame rate, so a heavy visualization
-      // or a warm laptop starved the beat detector of samples — the failure got
-      // worse precisely as the machine got busier. Listening is not drawing and
-      // must not be throttled by it.
-      this.isRunning = true;
-      this.lastAnalysisAt = 0;
-      this.analysisTimer = setInterval(() => this.updateAudioData(), 1000 / 60);
-      this.updateAudioData();
-
-      if (DEBUG) {
-        console.log('Audio started successfully with sample rate:', this.audioContext.sampleRate);
-      }
+      await this.attachStream(stream);
     } catch (error) {
       this.isRunning = false;
       console.error('Audio start error:', error);
@@ -567,6 +692,19 @@ class AudioProcessor {
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
+    }
+
+    // Media element source, if the file path was used.
+    if (this.mediaElement) {
+      this.mediaElement.pause();
+      this.mediaElement.removeAttribute('src');
+      this.mediaElement.load();
+      this.mediaElement = null;
+    }
+
+    if (this.mediaElementURL) {
+      URL.revokeObjectURL(this.mediaElementURL);
+      this.mediaElementURL = null;
     }
 
     // Disconnect and clean up audio nodes

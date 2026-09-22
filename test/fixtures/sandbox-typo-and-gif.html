@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- TEST FIXTURE for test/verify-sandbox.mjs. KEEP BOTH MISTAKES.
+     A misspelled colour and a GIF that is not there, in one page. Both write to
+     the same line in the rail and the GIF's callback lands last, so this fixture
+     is the proof that the second message does not erase the first.
+
+     It lives here, not in sandbox/, so that a deliberately broken page is not
+     sitting in the directory students are pointed at, where it would read as
+     the page they were told to open. netlify.toml publishes the repository
+     root, so this file is served publicly either way. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script src="../../app/audioProcessor.js"></script>
+    <script src="../../app/visualizer.js"></script>
+    <script src="../../sandbox/engine.js"></script>
+
+    <title>Sandbox fixture</title>
+
+    <style>
+      :root {
+        --bass: #ff453a;
+        --mid: grene; /* deliberate typo */
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <dj-visualizer dj-name="Two Mistakes" mode="rings" gif="nope.gif"></dj-visualizer>
+  </body>
+</html>
