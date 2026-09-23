@@ -601,9 +601,9 @@ async function boostTest(browser, base) {
       sliders,
       before,
       after,
-      shown: slider.parentElement.querySelector('.sandbox-boost-value').textContent,
+      shown: slider.closest('.band').querySelector('.band-value').textContent,
       status: document.querySelector('.sandbox-status').textContent,
-      inRail: !!document.querySelector('.sandbox-rail .sandbox-boosts')
+      inRail: !!document.querySelector('.sandbox-rail .sandbox-bands')
     };
   });
 
@@ -724,6 +724,68 @@ async function gifButtonTest(browser, base) {
     broken && broken.mode
   );
   await bad.page.close();
+}
+
+// DESIGN.md, "The student sandbox". The rail is the main app's console rebuilt:
+// the level fills are the ones DJVisualizer drives, the rail height is measured
+// rather than declared, and Reduce flash follows the system setting and the
+// student's own choice, as the main app's does.
+const readConsole = () => {
+  const el = window.djSandbox;
+  if (!el) return null;
+  const v = el.visualizer;
+  const rail = document.querySelector('.sandbox-rail');
+  return {
+    fillsWired:
+      v.bassFill === rail.querySelector('.bass-fill') &&
+      v.midFill === rail.querySelector('.mid-fill') &&
+      v.highFill === rail.querySelector('.high-fill') &&
+      !!v.bassFill,
+    railMeasured: v.railH === rail.offsetHeight && rail.offsetHeight > 0,
+    railH: v.railH,
+    railPx: rail.offsetHeight,
+    flash: v.flashIntensity,
+    tokensLoaded:
+      getComputedStyle(document.documentElement).getPropertyValue('--fill').trim() !== ''
+  };
+};
+
+async function consoleTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const state = await page.evaluate(readConsole);
+
+  check('the console fixture throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('the shared tokens reach the sandbox', !!state && state.tokensLoaded);
+  check('the level fills are the ones DJVisualizer drives', !!state && state.fillsWired);
+  check(
+    'the rail height is measured, not declared',
+    !!state && state.railMeasured,
+    state && `visualizer ${state.railH} vs rail ${state.railPx}`
+  );
+  check('flashing is full when the system asks for nothing', !!state && state.flash === 1);
+
+  const toggled = await page.evaluate(() => {
+    const el = window.djSandbox;
+    el.flashInput.checked = true;
+    el.flashInput.dispatchEvent(new Event('change'));
+    return el.visualizer.flashIntensity;
+  });
+  check('Reduce flash turns flashing down', toggled === 0.15, String(toggled));
+  await page.close();
+
+  const reduced = await browser.newPage({ reducedMotion: 'reduce' });
+  await reduced.goto(`${base}/test/fixtures/sandbox-attributes.html`);
+  await reduced.waitForTimeout(700);
+  const quiet = await reduced.evaluate(() => ({
+    flash: window.djSandbox ? window.djSandbox.visualizer.flashIntensity : null,
+    ticked: window.djSandbox ? window.djSandbox.flashInput.checked : null
+  }));
+  check(
+    'a system that asks for reduced motion starts with Reduce flash on',
+    quiet.flash === 0.15 && quiet.ticked === true,
+    JSON.stringify(quiet)
+  );
+  await reduced.close();
 }
 
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
@@ -890,6 +952,7 @@ try {
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
   await gifButtonTest(browser, BASE);
+  await consoleTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();

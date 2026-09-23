@@ -32,10 +32,6 @@ const MODES = [
 
 const DEFAULT_MODE = 'flow';
 
-// Two rows: the music controls, then the three boosts. The visualizer keeps its
-// drawing above this line, so it has to match the rail's height in sandbox.css.
-const RAIL_HEIGHT = 104;
-
 // "Code how hard it hits" — the workshop's own promise. Each band's reading is
 // multiplied by its boost before the visualizer sees it, exactly as the main
 // app's three sliders do (app/app.js), and over the same range.
@@ -87,7 +83,8 @@ class DJVisualizerSandbox extends HTMLElement {
 
     this.visualizer = new DJVisualizer();
     this.visualizer.init();
-    this.visualizer.setRailHeight(RAIL_HEIGHT);
+    this.watchRail();
+    this.applyFlash();
     this.visualizer.currentMode = this.modeSelect.value;
     // The mode the student wrote. A GIF that fails hands the stage back to it.
     this.studentMode = this.modeSelect.value;
@@ -252,6 +249,10 @@ class DJVisualizerSandbox extends HTMLElement {
 
   // Every hook DJVisualizer.init() reaches for without a null guard is built
   // here. Omitting one throws during boot and the student sees a black page.
+  //
+  // The rail is the main app's console, rebuilt for this page: the same
+  // component classes, styled by sandbox.css from the shared tokens. See
+  // DESIGN.md, "The student sandbox".
   buildDom(name, mode) {
     const stage = document.createElement('div');
     stage.className = 'stage';
@@ -264,12 +265,12 @@ class DJVisualizerSandbox extends HTMLElement {
     // One container, two rows. Every word a student may read lives inside
     // .sandbox-rail, which is how the tests tell rail text from text that
     // escaped a comment.
-    const rail = document.createElement('div');
-    rail.className = 'sandbox-rail';
+    this.rail = document.createElement('div');
+    this.rail.className = 'sandbox-rail';
 
     const controls = document.createElement('div');
     controls.className = 'sandbox-controls';
-    rail.appendChild(controls);
+    this.rail.appendChild(controls);
 
     const label = document.createElement('span');
     label.className = 'sandbox-name';
@@ -278,25 +279,27 @@ class DJVisualizerSandbox extends HTMLElement {
 
     this.tabButton = document.createElement('button');
     this.tabButton.type = 'button';
-    this.tabButton.textContent = 'Play a YouTube tab';
+    this.tabButton.className = 'transport';
+    const dot = document.createElement('span');
+    dot.className = 'transport-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const tabLabel = document.createElement('span');
+    tabLabel.textContent = 'Play a YouTube tab';
+    this.tabButton.append(dot, tabLabel);
     this.tabButton.addEventListener('click', () => this.useTab());
     controls.appendChild(this.tabButton);
 
-    this.fileInput = document.createElement('input');
-    this.fileInput.type = 'file';
-    this.fileInput.accept = 'audio/*,video/*';
-    this.fileInput.className = 'sandbox-file';
+    this.fileInput = DJVisualizerSandbox.fileInput('audio/*,video/*');
     this.fileInput.addEventListener('change', () => this.useFile());
-    controls.appendChild(DJVisualizerSandbox.labelled('Song', this.fileInput));
+    controls.appendChild(DJVisualizerSandbox.field('Song', 'Choose a song', this.fileInput));
 
     // A student has no CodePen account, so there is nowhere to host the GIF
     // they made. Picking it from the laptop needs no host and no CORS header.
-    this.gifInput = document.createElement('input');
-    this.gifInput.type = 'file';
-    this.gifInput.accept = 'image/gif,image/*';
-    this.gifInput.className = 'sandbox-file';
+    this.gifInput = DJVisualizerSandbox.fileInput('image/gif,image/*');
     this.gifInput.addEventListener('change', () => this.useGifFile());
-    controls.appendChild(DJVisualizerSandbox.labelled('GIF', this.gifInput));
+    controls.appendChild(DJVisualizerSandbox.field('GIF', 'Choose a GIF', this.gifInput));
+
+    controls.appendChild(this.buildReduceFlash());
 
     // DJVisualizer.init() attaches a change listener to this without a guard.
     // Students never see it; the mode is an attribute on the element.
@@ -318,62 +321,143 @@ class DJVisualizerSandbox extends HTMLElement {
     this.status.textContent = 'Pick your music to start';
     controls.appendChild(this.status);
 
-    rail.appendChild(this.buildBoosts());
-    this.appendChild(rail);
+    this.rail.appendChild(this.buildBands());
+    this.appendChild(this.rail);
   }
 
-  // The second row of the rail. A slider changes the picture while the music
-  // plays; a CodePen edit restarts the picture and stops the music. So a
-  // student finds the value they like here, reads the number, and writes it
-  // into their code so it stays. The number is the bridge between the two.
-  buildBoosts() {
+  // The second row: the main app's three-band instrument, one control per band.
+  // The fill is the level after the boost, and DJVisualizer.init() finds it by
+  // its .bass-fill / .mid-fill / .high-fill class and drives its width. The
+  // thumb is the boost. A slider changes the picture while the music plays; a
+  // CodePen edit restarts the picture and stops the music. So a student finds a
+  // value here, reads the number, and writes it into their code so it stays.
+  buildBands() {
     const row = document.createElement('div');
-    row.className = 'sandbox-boosts';
+    row.className = 'sandbox-bands';
     this.boostSliders = {};
 
     for (const band of BOOST_BANDS) {
-      const label = document.createElement('label');
-      label.className = 'sandbox-boost';
-      // Each slider wears its own band's colour, so the student sees which
-      // colour on the stage they are about to turn up.
-      label.style.setProperty('--band', 'var(--' + band + ')');
+      const control = document.createElement('div');
+      control.className = 'band';
+      control.dataset.band = band;
 
-      const name = document.createElement('span');
-      name.className = 'sandbox-boost-name';
-      name.textContent = band + '-boost';
+      const track = document.createElement('div');
+      track.className = 'band-track';
+
+      const fill = document.createElement('div');
+      fill.className = 'band-fill ' + band + '-fill';
+      fill.setAttribute('aria-hidden', 'true');
 
       const slider = document.createElement('input');
       slider.type = 'range';
+      slider.className = 'band-input';
       slider.min = String(BOOST_MIN);
       slider.max = String(BOOST_MAX);
       slider.step = String(BOOST_STEP);
       slider.value = String(this.boosts[band]);
+      slider.setAttribute('aria-label', band + '-boost');
+
+      track.append(fill, slider);
+
+      const meta = document.createElement('div');
+      meta.className = 'band-meta';
+
+      const name = document.createElement('span');
+      name.className = 'band-name';
+      name.textContent = band;
+
+      // The attribute's exact name: what the student reads here is what they
+      // type in the HTML box.
+      const code = document.createElement('code');
+      code.className = 'band-code';
+      code.textContent = band + '-boost';
 
       const value = document.createElement('output');
-      value.className = 'sandbox-boost-value';
+      value.className = 'band-value';
       value.textContent = this.boosts[band].toFixed(1);
+
+      meta.append(name, code, value);
 
       slider.addEventListener('input', () => {
         this.boosts[band] = Number(slider.value);
         value.textContent = this.boosts[band].toFixed(1);
       });
 
-      label.append(name, slider, value);
-      row.appendChild(label);
+      control.append(track, meta);
+      row.appendChild(control);
       this.boostSliders[band] = slider;
     }
 
     return row;
   }
 
-  // Two rail inputs, and two things a student may pick, need telling apart.
-  static labelled(text, input) {
-    const label = document.createElement('label');
-    label.className = 'sandbox-field';
+  // A safety control, as in the main app's rail (app/app.js): defaulted from
+  // the system's reduced-motion setting, following it when it changes, and
+  // overridable in both directions. The main app's own copy of this never runs
+  // here, because the sandbox does not load app.js. The visualizer does not
+  // exist yet when the rail is built, so the value is applied in
+  // connectedCallback and on every change after that.
+  buildReduceFlash() {
+    const toggle = document.createElement('label');
+    toggle.className = 'toggle';
+    toggle.title = 'Reduce large flashing changes in the visuals';
+
+    this.flashInput = document.createElement('input');
+    this.flashInput.type = 'checkbox';
+
+    const text = document.createElement('span');
+    text.textContent = 'Reduce flash';
+    toggle.append(this.flashInput, text);
+
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    this.flashInput.checked = query.matches;
+    this.flashInput.addEventListener('change', () => this.applyFlash());
+    if (query.addEventListener) {
+      query.addEventListener('change', (event) => {
+        this.flashInput.checked = event.matches;
+        this.applyFlash();
+      });
+    }
+
+    return toggle;
+  }
+
+  applyFlash() {
+    if (this.visualizer) this.visualizer.setFlashIntensity(this.flashInput.checked ? 0.15 : 1);
+  }
+
+  // The rail's height is measured, never declared, as in the main app: two rows
+  // whose height depends on the font, the zoom, and whether a note wrapped.
+  // The stage composes above whatever the rail actually is.
+  watchRail() {
+    const sync = () => this.visualizer.setRailHeight(this.rail.offsetHeight);
+    sync();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(sync).observe(this.rail);
+  }
+
+  static fileInput(accept) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.className = 'field-file';
+    return input;
+  }
+
+  // An uppercase field label above a pill, the main app's .field. The native
+  // file input stays in the label, so a click or Enter on the pill opens the
+  // picker, but it is visually hidden: its own "No file chosen" text does not
+  // fit a 900px rail, and the rail already names the file once it is playing.
+  static field(label, action, input) {
+    const field = document.createElement('label');
+    field.className = 'field';
     const name = document.createElement('span');
-    name.textContent = text;
-    label.append(name, input);
-    return label;
+    name.className = 'field-label';
+    name.textContent = label;
+    const pill = document.createElement('span');
+    pill.className = 'field-button';
+    pill.textContent = action;
+    field.append(name, input, pill);
+    return field;
   }
 
   // A GIF is optional and its path is the one student value that can point at
@@ -462,6 +546,7 @@ class DJVisualizerSandbox extends HTMLElement {
     try {
       await this.processor.startTabAudio();
       this.visualizer.start();
+      this.dataset.running = 'true';
       this.say('Playing your tab');
     } catch (error) {
       console.debug('sandbox tab source failed', error);
@@ -480,6 +565,7 @@ class DJVisualizerSandbox extends HTMLElement {
     try {
       await this.processor.startFileAudio(file);
       this.visualizer.start();
+      this.dataset.running = 'true';
       this.say('Playing ' + file.name);
     } catch (error) {
       console.debug('sandbox file source failed', error);

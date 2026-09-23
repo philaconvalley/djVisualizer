@@ -22,6 +22,7 @@ Recorded from the built world on 2026-08-09, not from intention. `PRODUCT.md` ow
 | --- | --- | --- |
 | Operator console (the rail) | Operate | Task and state outrank expression. |
 | Stage / installation | Experience | The artifact leads; the interface recedes to one rail. |
+| Student sandbox rail (the workshop pen) | Operate | A learner's console. Same world, fewer controls; see "The student sandbox" below. |
 
 ## Colors
 
@@ -211,11 +212,83 @@ Hover is gated behind `@media (hover: hover) and (pointer: fine)` so touch does 
 - Browser surfaces are themed from the palette: `::selection`, `:focus-visible`, scrollbar, file-selector button, `option`. Do not revert these.
 - The help dialog sets `aria-modal` only while open, moves focus in on open, restores it on close, and closes via button, backdrop, or Esc.
 
+## The student sandbox
+
+The workshop pen (`sandbox/`, shown inside a CodePen frame at about 900px wide) is the
+product's second console. Its users are students in grades 6 to 12 with no coding
+experience. It is **the same visual world, not a lighter one.** Until 2026-09-22 it had its
+own 137-line stylesheet with copied values and native controls, and it drifted: the
+same app looked like two products. This section is the contract that closes that gap.
+
+### One source for tokens
+
+- The `:root` block moves out of `styles/styles.css` into `styles/tokens.css`. Both
+  consoles load it: `index.html` with a `<link>` before `styles.css`, and
+  `sandbox/sandbox.css` with `@import url('../styles/tokens.css')` as its first line.
+- The `@import` keeps the pen's "Stuff for `<head>`" unchanged, so the live pen needs no
+  edit when a token changes.
+- `sandbox.css` holds **no colour, radius, or timing value of its own.** A literal that
+  duplicates a token is drift.
+- `engine.js` keeps `DEFAULT_PALETTE` for one job only: restoring the band colours when a
+  student's typo swallows their CSS. The existing palette-drift test keeps it equal to
+  the template.
+
+### What the sandbox inherits, unchanged
+
+| Main-app component | Sandbox use |
+| --- | --- |
+| `.transport` pill | "Play a YouTube tab" |
+| `.field-file::file-selector-button` pill | "Choose a song" and "Choose a GIF" (`.field-button`), each under a `.field-label`. The native input stays inside the label for its picker and focus, visually hidden: its "No file chosen" text does not fit a 900px rail, and the rail names the file once it plays. |
+| The three-band instrument (`.band`, `.band-track`, `.band-fill`, `.band-input`) | The three boosts. Fill = live post-boost level, thumb = boost. Same 0.1 to 3 range. The track is 36px high, not 42px: the pen's stage is short inside CodePen, and the rail already takes two rows. |
+| `.band-name`, `.band-value` | Band label and the boost number, tabular |
+| `.readout-status` role | The status line. Its type is larger (12px, `--label-2`) and it wraps, because here it carries typo notes a student must read. |
+| Console material, edge, scrim | The rail |
+| Press and hover rules, `--press`, `--ease-out` | All controls |
+
+The fill needs no sandbox code: `DJVisualizer.init()` finds `.bass-fill`, `.mid-fill`,
+and `.high-fill` and sets their width from the audio data it receives, which the
+sandbox has already multiplied by the boosts. The fill never animates, as in the main
+app.
+
+### What differs, and why
+
+- **Two rows, not one.** Row 1 is the music: DJ name, Play a YouTube tab, Song, GIF,
+  Reduce flash, status. Row 2 is the three-band instrument across the full width. The main app's
+  one-row rule protects an operator's view of the stage. The pen has more controls, a
+  900px frame, and a student who must read every label, so each control stays full size
+  on two rows.
+- **Each band shows its code name.** Under "BASS" sits `bass-boost` in 11px monospace at
+  `--label-3`. The name a student reads on screen is the name they type in the HTML box.
+  This is the one place the sandbox teaches, and it outranks the reduction target.
+- **The rail height is measured, as in the main app.** A `ResizeObserver` on the rail
+  calls `visualizer.setRailHeight()`. The `RAIL_HEIGHT` constant goes away, so the CSS and
+  the script cannot disagree again.
+- **No device select, no BPM or FPS readouts, no fullscreen, no help dialog.** Reduce
+  flash is the one operator control the pen keeps; see Photosensitivity. The
+  student's task is to change the look and hear the result. Readouts are operator
+  information.
+- **All rail text stays inside `.sandbox-rail`.** The verification suite treats text
+  anywhere else as text that escaped a broken comment.
+
+### Photosensitivity
+
+`DESIGN.md` makes "Reduce flash" a product requirement in the always-visible rail, and the
+pen meets it the same way the main app does (decided 2026-09-22). Until then it fell
+short twice: its rail had no toggle, and it did not read `prefers-reduced-motion`,
+because that check lives in `app/app.js`, which the sandbox never runs. A room of up to
+20 students who did not choose the content is exactly the audience the rule is for.
+
+- Row 1 carries the main app's `.toggle`, "Reduce flash".
+- It defaults from `prefers-reduced-motion`, follows changes to it, and is overridable in
+  both directions.
+- On, it sets `flashIntensity` to `0.15`; off, to `1`. Same values as `app/app.js`.
+
 ## Open decisions
 
 1. **Band hues** — Apple system colors read close to pure RGB primaries. Unresolved with the user. Now more visible than it was: the hues appear across all ten canvas modes rather than only in the rail, so if they are going to change, changing them is a one-line token edit and costs nothing. Screenshots of every mode are in `test/output/` after `npm run verify`, which is the fastest way to judge it.
 2. **PhilaCon Valley brand kit** — not yet binding; tokens are structured for a clean swap.
 3. ~~**p5.js still loads from a CDN**~~ — resolved. p5 1.9.0 is vendored in `vendor/`.
+4. ~~**Reduce flash in the student pen**~~ — resolved 2026-09-22: the pen reads `prefers-reduced-motion` and carries the toggle. See "The student sandbox".
 
 ## What this file specs
 

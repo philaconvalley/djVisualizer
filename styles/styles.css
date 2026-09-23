@@ -1,37 +1,6 @@
 /* DJ Visualizer — Apple / Control Center register, Radiooooo reduction.
    The canvas is the interface. One frosted console rail floats over it, always visible. */
 
-:root {
-  /* Ground. The use scene is a dark venue with a projected surface. */
-  --stage: #000000;
-  /* Alpha is set by the worst case, not the best: a bright Galaxy frame passing
-     under the rail must not lift the backdrop enough to break label contrast. */
-  --material: rgba(28, 28, 30, 0.86);
-  --material-solid: #1c1c1e;
-  --material-edge: rgba(255, 255, 255, 0.14);
-
-  /* Band identity. Mapping is fixed by the product; hues are tokens. */
-  --bass: #ff453a;
-  --mid: #30d158;
-  --high: #0a84ff;
-
-  /* Vibrancy-tuned label colors. Tinted from the foreground, never flat gray. */
-  --label: #ffffff;
-  --label-2: rgba(235, 235, 245, 0.8);
-  --label-3: rgba(235, 235, 245, 0.58);
-
-  --track: rgba(120, 120, 128, 0.32);
-
-  --radius-module: 14px;
-  --radius-control: 999px;
-
-  --rail-h: 116px;
-
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --press: 120ms;
-  --overlay: 200ms;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -158,12 +127,12 @@ body[data-running='true'] .stage-hint {
   flex-wrap: wrap;
 
   background: var(--material);
-  backdrop-filter: blur(32px) saturate(180%);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
   /* Light catching the top edge of a real material. Elevation declared once. */
   box-shadow:
     inset 0 1px 0 0 var(--material-edge),
-    0 -12px 40px rgba(0, 0, 0, 0.5);
+    var(--material-shadow);
 }
 
 /* Opaque scrim beneath the translucent rail so the composite floor is fixed
@@ -174,7 +143,7 @@ body[data-running='true'] .stage-hint {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.34));
+  background: var(--material-scrim);
   pointer-events: none;
 }
 
@@ -264,7 +233,7 @@ body[data-running='true'] .stage-hint {
   padding: 12px 22px 12px 18px;
   border: 0;
   border-radius: var(--radius-control);
-  background: rgba(120, 120, 128, 0.24);
+  background: var(--fill);
   color: var(--label);
   font: inherit;
   font-weight: 590;
@@ -289,7 +258,7 @@ body[data-running='true'] .stage-hint {
 }
 
 body[data-running='true'] .transport {
-  background: rgba(255, 69, 58, 0.22);
+  background: var(--transport-live);
 }
 body[data-running='true'] .transport-dot {
   background: var(--bass);
@@ -325,7 +294,7 @@ body[data-running='true'] .transport-dot {
   padding: 8px 30px 8px 12px;
   border: 0;
   border-radius: 10px;
-  background: rgba(120, 120, 128, 0.24);
+  background: var(--fill);
   color: var(--label);
   font: inherit;
   font-size: 14px;
@@ -359,7 +328,7 @@ body[data-running='true'] .transport-dot {
   padding: 7px 14px;
   border: 0;
   border-radius: var(--radius-control);
-  background: rgba(120, 120, 128, 0.24);
+  background: var(--fill);
   color: var(--label);
   font: inherit;
   font-size: 13px;
@@ -390,7 +359,7 @@ body[data-running='true'] .transport-dot {
   position: relative;
   height: 42px;
   border-radius: 10px;
-  background: rgba(120, 120, 128, 0.2);
+  background: var(--band-ground);
   overflow: hidden;
 }
 
@@ -455,7 +424,7 @@ body[data-running='true'] .transport-dot {
   transition: background-color var(--press) ease;
 }
 .band:has(.band-input:active) .band-track {
-  background: rgba(120, 120, 128, 0.3);
+  background: var(--band-ground-press);
 }
 
 /* Pointer affordance. Gated because touch fires a false hover on tap. */
@@ -463,16 +432,16 @@ body[data-running='true'] .transport-dot {
   .transport:hover,
   .ghost:hover,
   .field-control:hover {
-    background-color: rgba(120, 120, 128, 0.36);
+    background-color: var(--fill-hover);
   }
   body[data-running='true'] .transport:hover {
-    background-color: rgba(255, 69, 58, 0.32);
+    background-color: var(--transport-live-hover);
   }
   .band:hover .band-track {
-    background-color: rgba(120, 120, 128, 0.26);
+    background-color: var(--band-ground-hover);
   }
   .field-file::file-selector-button:hover {
-    background-color: rgba(120, 120, 128, 0.36);
+    background-color: var(--fill-hover);
   }
 }
 
@@ -581,7 +550,7 @@ body[data-running='true'] .transport-dot {
   padding: 9px 16px;
   border: 0;
   border-radius: var(--radius-control);
-  background: rgba(120, 120, 128, 0.24);
+  background: var(--fill);
   color: var(--label);
   font: inherit;
   font-size: 13px;
@@ -752,10 +721,6 @@ kbd {
 }
 
 @media (prefers-contrast: more) {
-  :root {
-    --label-2: #ffffff;
-    --label-3: rgba(235, 235, 245, 0.8);
-  }
   .console {
     background: #000;
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
