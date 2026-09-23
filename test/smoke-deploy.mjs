@@ -22,6 +22,8 @@
  *   node test/smoke-deploy.mjs https://some-preview   # a deploy preview
  */
 
+import { readdir } from 'node:fs/promises';
+
 const BASE = (
   process.argv[2] ||
   process.env.SMOKE_URL ||
@@ -47,6 +49,7 @@ async function get(path) {
       status: res.status,
       type: res.headers.get('content-type') || '',
       csp: res.headers.get('content-security-policy') || '',
+      cors: res.headers.get('access-control-allow-origin') || '',
       body
     };
   } catch (error) {
@@ -166,6 +169,20 @@ check(
   !home.csp || /(^|\s)blob:(\s|$)/.test(connectSrc),
   home.csp ? `connect-src${connectSrc}` : 'no CSP header'
 );
+
+/* The GIF library. The pen loads these from CodePen, another origin, and p5
+   fetches in CORS mode, so each one needs Access-Control-Allow-Origin. The list
+   comes from the gifs/ folder on disk, not from this file, so a new GIF cannot
+   escape the check. */
+const gifDir = new URL('../gifs/', import.meta.url);
+const gifs = (await readdir(gifDir)).filter((name) => name.endsWith('.gif'));
+check('the GIF library is not empty', gifs.length > 0, `${gifs.length} found`);
+for (const name of gifs) {
+  const res = await get(`/gifs/${name}`);
+  check(`/gifs/${name} returns 200`, res.status === 200, res.error || `status ${res.status}`);
+  check(`/gifs/${name} is a GIF`, /image\/gif/i.test(res.type), res.type || 'no content-type');
+  check(`/gifs/${name} can be read from CodePen`, res.cors === '*', res.cors || 'no CORS header');
+}
 
 const failed = results.filter((r) => !r.passed);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
