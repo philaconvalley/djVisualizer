@@ -89,6 +89,8 @@ class DJVisualizerSandbox extends HTMLElement {
     this.visualizer.init();
     this.visualizer.setRailHeight(RAIL_HEIGHT);
     this.visualizer.currentMode = this.modeSelect.value;
+    // The mode the student wrote. A GIF that fails hands the stage back to it.
+    this.studentMode = this.modeSelect.value;
 
     this.processor.onDataUpdate = (data) =>
       this.visualizer.updateAudioData({
@@ -285,7 +287,16 @@ class DJVisualizerSandbox extends HTMLElement {
     this.fileInput.accept = 'audio/*,video/*';
     this.fileInput.className = 'sandbox-file';
     this.fileInput.addEventListener('change', () => this.useFile());
-    controls.appendChild(this.fileInput);
+    controls.appendChild(DJVisualizerSandbox.labelled('Song', this.fileInput));
+
+    // A student has no CodePen account, so there is nowhere to host the GIF
+    // they made. Picking it from the laptop needs no host and no CORS header.
+    this.gifInput = document.createElement('input');
+    this.gifInput.type = 'file';
+    this.gifInput.accept = 'image/gif,image/*';
+    this.gifInput.className = 'sandbox-file';
+    this.gifInput.addEventListener('change', () => this.useGifFile());
+    controls.appendChild(DJVisualizerSandbox.labelled('GIF', this.gifInput));
 
     // DJVisualizer.init() attaches a change listener to this without a guard.
     // Students never see it; the mode is an attribute on the element.
@@ -355,34 +366,77 @@ class DJVisualizerSandbox extends HTMLElement {
     return row;
   }
 
+  // Two rail inputs, and two things a student may pick, need telling apart.
+  static labelled(text, input) {
+    const label = document.createElement('label');
+    label.className = 'sandbox-field';
+    const name = document.createElement('span');
+    name.textContent = text;
+    label.append(name, input);
+    return label;
+  }
+
   // A GIF is optional and its path is the one student value that can point at
   // a file which is simply not there. It must fail as a message, never as a
   // stopped visualization. See PHI-222.
   applyGif(path) {
     const value = (path || '').trim();
     if (!value) return;
+    this.loadGif(value, 'Could not find the GIF at "' + value + '". Check the name.');
+  }
 
-    // The mode the student asked for. A GIF takes the stage while it loads, but
-    // a GIF that is not there must not cost them the choice they made.
-    const chosen = this.visualizer.currentMode;
+  // The GIF a student picked from the laptop. A CodePen edit restarts the
+  // picture and forgets it, like the music, so the rail says so.
+  async useGifFile() {
+    const file = this.gifInput.files[0];
+    if (!file) return;
+    if (this.gifURL) URL.revokeObjectURL(this.gifURL);
+    this.gifURL = URL.createObjectURL(await DJVisualizerSandbox.honestImage(file));
+    this.loadGif(
+      this.gifURL,
+      'That file would not open as a GIF. Try another one.',
+      'Showing ' + file.name + '. Pick it again after you change your code.'
+    );
+  }
 
+  // Chrome types a file by its name, so a WebP or a PNG saved as "party.gif"
+  // arrives as image/gif. p5 sends every image/gif to its own GIF decoder,
+  // which throws inside a promise on anything else and never calls the failure
+  // callback: the student gets an empty pulsing square and no message. So only
+  // a file that really starts "GIF8" keeps the GIF type. Anything else is
+  // untyped, which sends p5 to the browser's own image loader. That loader
+  // opens PNG, JPEG and WebP, and reports a file it cannot open.
+  static async honestImage(file) {
+    const head = await file.slice(0, 4).text();
+    return head === 'GIF8' ? file : new Blob([file]);
+  }
+
+  // One loader for both sources. p5 fetches the file before it decodes it:
+  // a blob: URL needs nothing, and a GIF on another site needs that site to
+  // send Access-Control-Allow-Origin, which /gifs/ on this host does.
+  loadGif(url, failure, success) {
     // The hidden select has no `custom` option, by design, so this clears its
     // value. Nothing reads it after boot; the visualizer's own mode is the one
     // that draws.
+    const previous = this.visualizer.currentMode;
     this.modeSelect.value = 'custom';
     this.visualizer.currentMode = 'custom';
-    this.visualizer.onModeChange(chosen);
+    if (previous !== 'custom') this.visualizer.onModeChange(previous);
 
     this.visualizer.p5Instance.loadImage(
-      value,
+      url,
       (image) => {
         this.visualizer.customMedia = image;
         this.visualizer.customMediaType = 'image';
+        if (success) this.say(success);
       },
       () => {
-        this.say('Could not find the GIF at "' + value + '". Check the name.');
-        this.modeSelect.value = chosen;
-        this.visualizer.currentMode = chosen;
+        this.say(failure);
+        // A GIF already on the stage stays there. With none, the stage goes
+        // back to the mode the student wrote, never to a hard-coded default.
+        if (this.visualizer.customMedia) return;
+        this.modeSelect.value = this.studentMode;
+        this.visualizer.currentMode = this.studentMode;
         this.visualizer.onModeChange('custom');
       }
     );

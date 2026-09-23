@@ -1088,12 +1088,23 @@ class DJVisualizer {
 
   /* ------------------------------------------------------------ media i/o */
 
-  loadCustomMedia(file) {
+  async loadCustomMedia(file) {
     if (!this.p5Instance) return;
 
     this.clearCustomMedia();
 
-    const url = URL.createObjectURL(file);
+    // Chrome types a file by its name, so a WebP or a PNG saved as "party.gif"
+    // arrives as image/gif. p5 sends every image/gif to its own GIF decoder,
+    // which throws inside a promise on anything else and never calls the
+    // failure callback below. Only a file that really starts "GIF8" keeps the
+    // GIF type; anything else goes to the browser's own image loader, which
+    // opens it or reports it. PHI-222.
+    let source = file;
+    if (file.type === 'image/gif' && (await file.slice(0, 4).text()) !== 'GIF8') {
+      source = new Blob([file]);
+    }
+
+    const url = URL.createObjectURL(source);
     this.customMediaURL = url;
 
     if (file.type.startsWith('video/')) {

@@ -648,6 +648,84 @@ async function boostTest(browser, base) {
   await page.close();
 }
 
+// PHI-222 in the pen. A student has no CodePen account and nowhere to host
+// the GIF they made, so the rail takes one straight from the laptop. The file
+// becomes a blob: URL and goes through the same loader as the gif attribute.
+const pickGif = async ({ base, name, kind }) => {
+  const el = window.djSandbox;
+  if (!el) return null;
+  let bytes;
+  if (kind === 'gif') {
+    bytes = new Uint8Array(await (await fetch(base + '/test/fixtures/tiny.gif')).arrayBuffer());
+  } else if (kind === 'png') {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 4;
+    const png = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    bytes = new Uint8Array(await png.arrayBuffer());
+  } else {
+    bytes = new TextEncoder().encode('this is not a picture');
+  }
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([bytes], name, { type: 'image/gif' }));
+  el.gifInput.files = transfer.files;
+  el.gifInput.dispatchEvent(new Event('change'));
+  await new Promise((r) => setTimeout(r, 900));
+  return {
+    hasMedia: !!el.visualizer.customMedia,
+    mode: el.visualizer.currentMode,
+    status: document.querySelector('.sandbox-status').textContent
+  };
+};
+
+async function gifButtonTest(browser, base) {
+  const good = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const picked = await good.page.evaluate(pickGif, { base, name: 'my-gif.gif', kind: 'gif' });
+
+  check('picking a GIF throws nothing', good.thrown.length === 0, good.thrown.join(' | '));
+  check('a picked GIF becomes the custom media', !!picked && picked.hasMedia);
+  check(
+    'a picked GIF takes the stage',
+    !!picked && picked.mode === 'custom',
+    picked && picked.mode
+  );
+  check(
+    'a picked GIF is named on the rail',
+    !!picked && picked.status.includes('my-gif.gif'),
+    picked && picked.status
+  );
+  await good.page.close();
+
+  // The case a free GIF maker produces: another picture format saved under a
+  // .gif name. Chrome calls it image/gif, and p5's GIF decoder used to throw on
+  // it with no message.
+  const renamed = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const png = await renamed.page.evaluate(pickGif, { base, name: 'party.gif', kind: 'png' });
+
+  check(
+    'a PNG saved as .gif throws nothing',
+    renamed.thrown.length === 0,
+    renamed.thrown.join(' | ')
+  );
+  check('a PNG saved as .gif still loads', !!png && png.hasMedia, png && png.status);
+  await renamed.page.close();
+
+  const bad = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const broken = await bad.page.evaluate(pickGif, { base, name: 'essay.gif', kind: 'text' });
+
+  check('a file that is not a GIF throws nothing', bad.thrown.length === 0, bad.thrown.join(' | '));
+  check(
+    'a file that is not a GIF says so',
+    !!broken && broken.status.includes('would not open'),
+    broken && broken.status
+  );
+  check(
+    "a file that is not a GIF keeps the student's own mode",
+    !!broken && broken.mode === 'rings',
+    broken && broken.mode
+  );
+  await bad.page.close();
+}
+
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
 // string", and the proxy fails for everything thrown inside attachStream —
 // a failed audioWorklet.addModule most of all. These two stubs are the two
@@ -811,6 +889,7 @@ try {
   await modeFallbackTest(browser, BASE);
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
+  await gifButtonTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();

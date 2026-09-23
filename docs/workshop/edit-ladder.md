@@ -34,8 +34,12 @@ Stop here. Look at the screen while a song plays. Watch which colour moves when.
 7. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
    Choose values that go together this time. Press Play. Look at the screen. You are done when
    the three colours look like they belong to the same song.
-8. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
-   If the name is wrong, the page tells you. The music keeps playing either way.
+8. **Add your GIF.** Press the **GIF** button under the picture. Pick the GIF you made.
+   It takes over the stage and moves with the music. It goes away when you change your
+   code, like the music does, so pick it again after. For a GIF that stays, type one from
+   the library into your code: `gif="https://dj-visualizer.netlify.app/gifs/rings.gif"`.
+   The library also has `stars.gif` and `waves.gif`. If a GIF will not open, the page
+   tells you, and the music keeps playing.
 9. **Explain your choice.** Tell the person next to you which colour and which boost you
    gave the bass, and why that fits your song.
 
