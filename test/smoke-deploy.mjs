@@ -42,7 +42,13 @@ async function get(path) {
   try {
     const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
     const body = await res.text();
-    return { url, status: res.status, type: res.headers.get('content-type') || '', body };
+    return {
+      url,
+      status: res.status,
+      type: res.headers.get('content-type') || '',
+      csp: res.headers.get('content-security-policy') || '',
+      body
+    };
   } catch (error) {
     return { url, status: 0, type: '', body: '', error: String(error) };
   } finally {
@@ -145,6 +151,20 @@ check(
   'missing paths 404 rather than returning the page',
   missing.status === 404,
   `status ${missing.status}`
+);
+
+/* PHI-222. p5's loadImage calls fetch() on every image before it decodes it,
+   and an uploaded file is a blob: URL. fetch() answers to connect-src, not
+   img-src, so a CSP whose connect-src omits blob: turns every upload into
+   "Failed to load" while the same code works on a local server with no CSP.
+   The 08/21 header change did exactly that, a week before the 08/28 practice
+   session where the GIF station failed. */
+const home = await get('/');
+const connectSrc = (home.csp.match(/connect-src([^;]*)/) || [])[1] || '';
+check(
+  'the CSP lets p5 fetch an uploaded file (connect-src allows blob:)',
+  !home.csp || /(^|\s)blob:(\s|$)/.test(connectSrc),
+  home.csp ? `connect-src${connectSrc}` : 'no CSP header'
 );
 
 const failed = results.filter((r) => !r.passed);
