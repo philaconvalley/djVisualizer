@@ -10,12 +10,17 @@
 
 [[headers]]
   for = "/*"
+  # connect-src carries blob: because p5's loadImage calls fetch() on every
+  # image before it decodes it, and an uploaded GIF is a blob: URL. Without it
+  # every upload reads "Failed to load" (PHI-222). A blob: URL can only be made
+  # by a script already running on this origin, so this admits nothing new from
+  # outside. test/smoke-deploy.mjs checks it.
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' blob:"
 
 [[headers]]
   for = "*.js"
