@@ -156,7 +156,14 @@ class DJVisualizerSandbox extends HTMLElement {
     }
     if (!notes.length) return;
 
-    notes.push('Look for a missing quote mark, or a note with no closing arrow, then reload.');
+    // No "reload" here. In the CodePen pen a student has no account, and a
+    // reload throws away every change they made. The pen updates on its own.
+    if (this.rebuilt) {
+      notes.push('Look for a missing quote mark, or a note with no closing arrow.');
+    }
+    if (this.paletteReport.missing.length || this.paletteReport.unreadable.length) {
+      notes.push('In your colours, look for a missing ; or a note with no */ at its end.');
+    }
 
     // Kept, because every later message lands on the same line: the GIF's
     // callback, and everything useTab and useFile report.

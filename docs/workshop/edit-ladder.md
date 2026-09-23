@@ -12,7 +12,7 @@ A typo in your part of the file never stops the machine. The picture always come
 1. **Pick your music.** Press **Play a YouTube tab**. Choose the tab playing your song.
    Tick **Share tab audio**. If that does not work, plug in the station USB stick. Choose
    a song file instead.
-2. **Change one colour.** Find `--bass` near the top. Change `#ff453a` to `#ffcc00`.
+2. **Change one colour.** Find `--bass` in the CSS box. Change `#ff453a` to `#ffcc00`.
    Press Play. The low drums are now yellow.
 
 Stop here. Look at the screen while a song plays. Watch which colour moves when.

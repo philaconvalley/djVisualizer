@@ -1,0 +1,12 @@
+/* ============================ THIS BOX IS YOURS ============================
+   Your colours. Each one belongs to a part of the music.
+   Write them any way you like: red, #f00, #ff4433, or rgb(255, 0, 0).
+
+   If your colours disappear, look for a missing semicolon ; or a note that
+   is missing the star and slash that end it. */
+
+:root {
+  --bass: #ff453a; /* the low drums you feel in your chest */
+  --mid: #30d158; /* the voice and most instruments */
+  --high: #0a84ff; /* the cymbals and the bright edges */
+}
