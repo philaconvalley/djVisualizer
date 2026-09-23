@@ -485,7 +485,11 @@ class DJVisualizerSandbox extends HTMLElement {
     this.loadGif(
       this.gifURL,
       'That file would not open as a GIF. Try another one.',
-      'Showing ' + file.name + '. Pick it again after you change your code.'
+      // Nothing draws until music plays, in every mode, so "Showing" would be
+      // false on a black stage. The message says what to do next.
+      this.visualizer.isRunning
+        ? 'Showing ' + file.name + '. Pick it again after you change your code.'
+        : file.name + ' is ready. Play a song to see it move.'
     );
   }
 
