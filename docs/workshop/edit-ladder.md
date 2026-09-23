@@ -2,8 +2,10 @@
 
 For the workshop. The first session is middle school. The second is high school.
 
-Each rung is one small edit. Change the value. Reload the page. Look at the screen.
-The music and the picture keep going no matter what you type in your part of the file.
+Each rung is one small edit. Change the value. Stop typing. The picture updates by itself.
+Press Play again to bring your music back. Do not reload the page: CodePen forgets your
+changes when you do.
+A typo in your part of the file never stops the machine. The picture always comes back.
 
 ## Start here
 
@@ -11,25 +13,24 @@ The music and the picture keep going no matter what you type in your part of the
    Tick **Share tab audio**. If that does not work, plug in the station USB stick. Choose
    a song file instead.
 2. **Change one colour.** Find `--bass` near the top. Change `#ff453a` to `#ffcc00`.
-   Reload. The low drums are now yellow.
+   Press Play. The low drums are now yellow.
 
 Stop here. Look at the screen while a song plays. Watch which colour moves when.
 
 ## Level up
 
-3. **Name your page.** Change the text inside `<title>`. Reload. Look at the browser tab.
-4. **Name yourself.** Change `dj-name="DJ NOVA"` to your DJ name.
-5. **Change the whole look.** Change `mode="flow"` to one of these, one at a time:
+3. **Name yourself.** Change `dj-name="DJ NOVA"` to your DJ name.
+4. **Change the whole look.** Change `mode="flow"` to one of these, one at a time:
    `spectrum`, `particles`, `rings`, `waves`, `mandala`, `tunnel`, `galaxy`, `polygons`.
 
 ## Boss
 
-6. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
-   Choose values that go together this time. Reload. Look at the screen. You are done when
+5. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
+   Choose values that go together this time. Press Play. Look at the screen. You are done when
    the three colours look like they belong to the same song.
-7. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
+6. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
    If the name is wrong, the page tells you. The music keeps playing either way.
-8. **Explain your choice.** Tell the person next to you which colour you gave the bass,
+7. **Explain your choice.** Tell the person next to you which colour you gave the bass,
    and why that fits your song.
 
 ## If something looks wrong
