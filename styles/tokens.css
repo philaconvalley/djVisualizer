@@ -1,0 +1,71 @@
+/* DJ Visualizer design tokens. The one source for both consoles: index.html
+   loads this before styles/styles.css, and sandbox/sandbox.css imports it. A
+   value duplicated in either stylesheet is drift. See DESIGN.md. */
+
+:root {
+  /* Ground. The use scene is a dark venue with a projected surface. */
+  --stage: #000000;
+  /* Alpha is set by the worst case, not the best: a bright Galaxy frame passing
+     under the rail must not lift the backdrop enough to break label contrast. */
+  --material: rgba(28, 28, 30, 0.86);
+  --material-solid: #1c1c1e;
+  --material-edge: rgba(255, 255, 255, 0.14);
+
+  /* Band identity. Mapping is fixed by the product; hues are tokens. */
+  --bass: #ff453a;
+  --mid: #30d158;
+  --high: #0a84ff;
+
+  /* Vibrancy-tuned label colors. Tinted from the foreground, never flat gray. */
+  --label: #ffffff;
+  --label-2: rgba(235, 235, 245, 0.8);
+  --label-3: rgba(235, 235, 245, 0.58);
+
+  --track: rgba(120, 120, 128, 0.32);
+
+  --radius-module: 14px;
+  --radius-control: 999px;
+
+  --rail-h: 116px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --press: 120ms;
+  --overlay: 200ms;
+
+  /* Filled neutral grounds for controls. Named so the student sandbox, which
+     cannot load this stylesheet, draws its controls from the same values. */
+  --fill: rgba(120, 120, 128, 0.24);
+  --fill-hover: rgba(120, 120, 128, 0.36);
+  --band-ground: rgba(120, 120, 128, 0.2);
+  --band-ground-hover: rgba(120, 120, 128, 0.26);
+  --band-ground-press: rgba(120, 120, 128, 0.3);
+
+  /* The band instrument's shape, and the focus ring's corner. */
+  --radius-track: 10px;
+  --radius-fill: 8px;
+  --radius-thumb: 2px;
+  --radius-focus: 6px;
+  --thumb-edge: 0 0 0 1px rgba(0, 0, 0, 0.35);
+
+  /* The transport while music runs: tinted from the bass, the one band it
+     answers to. */
+  --transport-live: rgba(255, 69, 58, 0.22);
+  --transport-live-hover: rgba(255, 69, 58, 0.32);
+
+  /* The console material's depth: blur behind, scrim beneath, one shadow. */
+  --material-blur: blur(32px) saturate(180%);
+  --material-scrim: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.34));
+  --material-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Labels lift when the reader asks for more contrast. Here, not in a console
+   stylesheet, so both consoles follow it. */
+@media (prefers-contrast: more) {
+  :root {
+    --label-2: #ffffff;
+    --label-3: rgba(235, 235, 245, 0.8);
+    --fill: rgba(120, 120, 128, 0.45);
+    --band-ground: rgba(120, 120, 128, 0.45);
+    --material-edge: rgba(255, 255, 255, 0.5);
+  }
+}

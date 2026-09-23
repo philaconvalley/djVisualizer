@@ -601,9 +601,9 @@ async function boostTest(browser, base) {
       sliders,
       before,
       after,
-      shown: slider.parentElement.querySelector('.sandbox-boost-value').textContent,
+      shown: slider.closest('.band').querySelector('.band-value').textContent,
       status: document.querySelector('.sandbox-status').textContent,
-      inRail: !!document.querySelector('.sandbox-rail .sandbox-boosts')
+      inRail: !!document.querySelector('.sandbox-rail .sandbox-bands')
     };
   });
 
@@ -724,6 +724,114 @@ async function gifButtonTest(browser, base) {
     broken && broken.mode
   );
   await bad.page.close();
+}
+
+// DESIGN.md, "The student sandbox". The rail is the main app's console rebuilt:
+// the level fills are the ones DJVisualizer drives, the rail height is measured
+// rather than declared, and Reduce flash follows the system setting and the
+// student's own choice, as the main app's does.
+const readConsole = () => {
+  const el = window.djSandbox;
+  if (!el) return null;
+  const v = el.visualizer;
+  const rail = document.querySelector('.sandbox-rail');
+  return {
+    fillsWired:
+      v.bassFill === rail.querySelector('.bass-fill') &&
+      v.midFill === rail.querySelector('.mid-fill') &&
+      v.highFill === rail.querySelector('.high-fill') &&
+      !!v.bassFill,
+    railMeasured: v.railH === rail.offsetHeight && rail.offsetHeight > 0,
+    railH: v.railH,
+    railPx: rail.offsetHeight,
+    flash: v.flashIntensity,
+    tokensLoaded:
+      getComputedStyle(document.documentElement).getPropertyValue('--fill').trim() !== ''
+  };
+};
+
+async function consoleTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  const state = await page.evaluate(readConsole);
+
+  check('the console fixture throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('the shared tokens reach the sandbox', !!state && state.tokensLoaded);
+  check('the level fills are the ones DJVisualizer drives', !!state && state.fillsWired);
+  check(
+    'the rail height is measured, not declared',
+    !!state && state.railMeasured,
+    state && `visualizer ${state.railH} vs rail ${state.railPx}`
+  );
+  check('flashing is full when the system asks for nothing', !!state && state.flash === 1);
+
+  const toggled = await page.evaluate(() => {
+    const el = window.djSandbox;
+    el.flashInput.checked = true;
+    el.flashInput.dispatchEvent(new Event('change'));
+    return el.visualizer.flashIntensity;
+  });
+  check('Reduce flash turns flashing down', toggled === 0.15, String(toggled));
+
+  // From the design review. The track clips its fill and used to clip the
+  // slider's focus outline with it, so keyboard focus was invisible.
+  await page.focus('.band-input');
+  const ring = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.band-track')).outlineStyle
+  );
+  check('a focused band slider shows its ring on the track', ring === 'solid', ring);
+
+  const live = await page.evaluate(() => ({
+    live: [...document.querySelectorAll('[aria-live]')].map((n) => n.textContent),
+    statusLive: document.querySelector('.sandbox-status').hasAttribute('aria-live')
+  }));
+  check(
+    'only the message is a live region, never the typo note',
+    live.live.length === 1 && !live.statusLive,
+    JSON.stringify(live)
+  );
+  await page.close();
+
+  // A long note at the pen's width is read in full: it wraps on its own line and
+  // is never clipped or scrolled.
+  const narrow = await browser.newPage({ viewport: { width: 900, height: 520 } });
+  await narrow.goto(`${base}/test/fixtures/sandbox-typo-and-gif.html`);
+  await narrow.waitForTimeout(900);
+  const note = await narrow.evaluate(() => {
+    const el = document.querySelector('.sandbox-status');
+    return { scroll: el.scrollHeight, client: el.clientHeight, text: el.textContent.length };
+  });
+  check(
+    'a long typo note at 900px is not clipped',
+    note.text > 100 && note.scroll <= note.client,
+    JSON.stringify(note)
+  );
+  await narrow.close();
+
+  const reduced = await browser.newPage({ reducedMotion: 'reduce' });
+  await reduced.goto(`${base}/test/fixtures/sandbox-attributes.html`);
+  await reduced.waitForTimeout(700);
+  const quiet = await reduced.evaluate(() => ({
+    flash: window.djSandbox ? window.djSandbox.visualizer.flashIntensity : null,
+    ticked: window.djSandbox ? window.djSandbox.flashInput.checked : null
+  }));
+  check(
+    'a system that asks for reduced motion starts with Reduce flash on',
+    quiet.flash === 0.15 && quiet.ticked === true,
+    JSON.stringify(quiet)
+  );
+  const pressed = await reduced.evaluate(() => {
+    const sheet = [...document.styleSheets].find((x) => (x.href || '').includes('sandbox.css'));
+    const rule = [...sheet.cssRules].find(
+      (r) => r.media && r.media.mediaText.includes('prefers-reduced-motion')
+    );
+    return rule ? rule.cssText : '';
+  });
+  check(
+    'reduced motion removes the press scale',
+    /transform:\s*none/.test(pressed),
+    pressed.slice(0, 80)
+  );
+  await reduced.close();
 }
 
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
@@ -890,6 +998,7 @@ try {
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
   await gifButtonTest(browser, BASE);
+  await consoleTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();
