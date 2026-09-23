@@ -106,6 +106,21 @@ dj-visualizer {
   white-space: nowrap;
 }
 
+.sandbox-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: rgba(235, 235, 245, 0.8);
+}
+
+/* Two file inputs share the row now, the song and the GIF. The browser's own
+   "No file chosen" text is wide, so each one gets a fixed share. */
+.sandbox-file {
+  max-width: 190px;
+  font-size: 12px;
+}
+
 .sandbox-status {
   margin-left: auto;
   max-width: 44%;
