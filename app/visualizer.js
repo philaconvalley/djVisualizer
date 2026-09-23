@@ -1033,7 +1033,11 @@ class DJVisualizer {
       p.pop();
     }
 
-    p.noTint();
+    // tint(255), never noTint(). In p5 1.9.0 noTint() sets the renderer's tint
+    // to null, and the WEBGL renderer hands that null to its uTint uniform and
+    // throws. p5 then stops its draw loop, so the stage froze on the first
+    // frame of any uploaded image. Full white is the same "no tint". PHI-222.
+    p.tint(255);
     p.image(this.customMedia, 0, 0, baseW, baseH);
     p.pop();
 

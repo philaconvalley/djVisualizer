@@ -726,6 +726,57 @@ async function gifButtonTest(browser, base) {
   await bad.page.close();
 }
 
+// PHI-222, the one the other GIF tests could not see: they never start the
+// music, and nothing draws until it starts. p5 1.9.0's noTint() sets the tint
+// to null, the WEBGL renderer passes that null to its uTint uniform and throws,
+// and p5 stops its draw loop on the first custom-mode frame. The stage froze
+// with any image at all. So this plays, then asserts the loop keeps running and
+// the GIF keeps advancing.
+async function gifPlaysTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-attributes.html');
+  await page.evaluate(async (b) => {
+    const bytes = new Uint8Array(await (await fetch(b + '/gifs/rings.gif')).arrayBuffer());
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], 'rings.gif', { type: 'image/gif' }));
+    const el = window.djSandbox;
+    el.gifInput.files = transfer.files;
+    el.gifInput.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 900));
+    el.visualizer.start();
+    window.__feed = setInterval(
+      () => el.processor.onDataUpdate({ bass: 0.5, mid: 0.4, high: 0.3, bpm: 120 }),
+      50
+    );
+  }, base);
+
+  const read = () =>
+    page.evaluate(() => {
+      const v = window.djSandbox.visualizer;
+      const m = v.customMedia;
+      return {
+        frame: v.p5Instance.frameCount,
+        gif: m && m.gifProperties ? m.gifProperties.displayIndex : null
+      };
+    });
+  const first = await read();
+  await page.waitForTimeout(1200);
+  const later = await read();
+  await page.evaluate(() => clearInterval(window.__feed));
+
+  check('a playing GIF throws nothing', thrown.length === 0, [...new Set(thrown)].join(' | '));
+  check(
+    'the stage keeps drawing while a GIF plays',
+    later.frame - first.frame > 10,
+    `${later.frame - first.frame} frames in 1.2s`
+  );
+  check(
+    'an animated GIF advances while it plays',
+    later.gif !== null && later.gif !== first.gif,
+    `frame ${first.gif} then ${later.gif}`
+  );
+  await page.close();
+}
+
 // DESIGN.md, "The student sandbox". The rail is the main app's console rebuilt:
 // the level fills are the ones DJVisualizer drives, the rail height is measured
 // rather than declared, and Reduce flash follows the system setting and the
@@ -998,6 +1049,7 @@ try {
   await gifMissingTest(browser, BASE);
   await gifLoadedTest(browser, BASE);
   await gifButtonTest(browser, BASE);
+  await gifPlaysTest(browser, BASE);
   await consoleTest(browser, BASE);
 } finally {
   await browser.close();
