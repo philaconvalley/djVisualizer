@@ -40,6 +40,13 @@
   --band-ground-hover: rgba(120, 120, 128, 0.26);
   --band-ground-press: rgba(120, 120, 128, 0.3);
 
+  /* The band instrument's shape, and the focus ring's corner. */
+  --radius-track: 10px;
+  --radius-fill: 8px;
+  --radius-thumb: 2px;
+  --radius-focus: 6px;
+  --thumb-edge: 0 0 0 1px rgba(0, 0, 0, 0.35);
+
   /* The transport while music runs: tinted from the bass, the one band it
      answers to. */
   --transport-live: rgba(255, 69, 58, 0.22);
@@ -58,5 +65,7 @@
     --label-2: #ffffff;
     --label-3: rgba(235, 235, 245, 0.8);
     --fill: rgba(120, 120, 128, 0.45);
+    --band-ground: rgba(120, 120, 128, 0.45);
+    --material-edge: rgba(255, 255, 255, 0.5);
   }
 }

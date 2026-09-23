@@ -33,7 +33,7 @@ body {
 :focus-visible {
   outline: 2px solid var(--high);
   outline-offset: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-focus);
 }
 ::-webkit-scrollbar {
   width: 10px;
@@ -358,7 +358,7 @@ body[data-running='true'] .transport-dot {
 .band-track {
   position: relative;
   height: 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-track);
   background: var(--band-ground);
   overflow: hidden;
 }
@@ -367,7 +367,7 @@ body[data-running='true'] .transport-dot {
   position: absolute;
   inset: 0 auto 0 0;
   width: 0%;
-  border-radius: 8px;
+  border-radius: var(--radius-fill);
 }
 
 .band[data-band='bass'] .band-fill {
@@ -398,9 +398,9 @@ body[data-running='true'] .transport-dot {
   width: 4px;
   height: 42px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-thumb);
   background: var(--label);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--thumb-edge);
   cursor: ew-resize;
 }
 
@@ -408,9 +408,9 @@ body[data-running='true'] .transport-dot {
   width: 4px;
   height: 42px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-thumb);
   background: var(--label);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--thumb-edge);
   cursor: ew-resize;
 }
 
@@ -443,6 +443,13 @@ body[data-running='true'] .transport-dot {
   .field-file::file-selector-button:hover {
     background-color: var(--fill-hover);
   }
+}
+
+/* The track clips its fill, and with it the slider's own focus outline. The
+   ring goes on the track, where it can be seen. */
+.band:has(.band-input:focus-visible) .band-track {
+  outline: 2px solid var(--high);
+  outline-offset: 3px;
 }
 
 .band-meta {

@@ -51,7 +51,7 @@ body {
 :focus-visible {
   outline: 2px solid var(--high);
   outline-offset: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-focus);
 }
 ::-webkit-scrollbar {
   width: 10px;
@@ -112,8 +112,9 @@ dj-visualizer {
 
 .sandbox-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 18px;
+  gap: 10px 18px;
   min-width: 0;
 }
 
@@ -249,16 +250,14 @@ dj-visualizer[data-running='true'] .transport-dot {
 }
 
 /* ---------- Status ----------
-   Larger and brighter than the main app's readout status, and allowed to wrap:
-   here it carries typo notes, which are instructions a student must read. */
+   Its own full-width line under the music controls, like the main app's error
+   banner row. Here it carries typo notes, which are instructions a student must
+   read in full, so it wraps and never scrolls. The rail height is measured, so
+   the stage recomposes when a note adds a line. */
 
 .sandbox-status {
-  flex: 1 1 0;
-  min-width: 160px;
-  align-self: center;
-  max-height: 48px;
-  overflow-y: auto;
-  text-align: right;
+  flex-basis: 100%;
+  margin: 0;
   font-size: 12px;
   line-height: 1.35;
   color: var(--label-2);
@@ -287,7 +286,7 @@ dj-visualizer[data-running='true'] .transport-dot {
 .band-track {
   position: relative;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-track);
   background: var(--band-ground);
   overflow: hidden;
   transition: background-color var(--press) ease;
@@ -297,7 +296,7 @@ dj-visualizer[data-running='true'] .transport-dot {
   position: absolute;
   inset: 0 auto 0 0;
   width: 0%;
-  border-radius: 8px;
+  border-radius: var(--radius-fill);
 }
 
 .band[data-band='bass'] .band-fill {
@@ -328,9 +327,9 @@ dj-visualizer[data-running='true'] .transport-dot {
   width: 4px;
   height: 36px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-thumb);
   background: var(--label);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--thumb-edge);
   cursor: ew-resize;
 }
 
@@ -338,9 +337,9 @@ dj-visualizer[data-running='true'] .transport-dot {
   width: 4px;
   height: 36px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-thumb);
   background: var(--label);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--thumb-edge);
   cursor: ew-resize;
 }
 
@@ -350,6 +349,13 @@ dj-visualizer[data-running='true'] .transport-dot {
 
 .band:has(.band-input:active) .band-track {
   background: var(--band-ground-press);
+}
+
+/* The track clips its fill, and with it the slider's own focus outline. The
+   ring goes on the track, where it can be seen. */
+.band:has(.band-input:focus-visible) .band-track {
+  outline: 2px solid var(--high);
+  outline-offset: 3px;
 }
 
 .band-meta {
@@ -405,5 +411,13 @@ dj-visualizer[data-running='true'] .transport-dot {
 @media (prefers-contrast: more) {
   .sandbox-rail {
     background: var(--stage);
+  }
+}
+
+/* Reduced motion removes scale change; colour still carries the press. */
+@media (prefers-reduced-motion: reduce) {
+  .transport:active,
+  .field:active .field-button {
+    transform: none;
   }
 }

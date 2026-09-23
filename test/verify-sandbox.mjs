@@ -771,7 +771,41 @@ async function consoleTest(browser, base) {
     return el.visualizer.flashIntensity;
   });
   check('Reduce flash turns flashing down', toggled === 0.15, String(toggled));
+
+  // From the design review. The track clips its fill and used to clip the
+  // slider's focus outline with it, so keyboard focus was invisible.
+  await page.focus('.band-input');
+  const ring = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.band-track')).outlineStyle
+  );
+  check('a focused band slider shows its ring on the track', ring === 'solid', ring);
+
+  const live = await page.evaluate(() => ({
+    live: [...document.querySelectorAll('[aria-live]')].map((n) => n.textContent),
+    statusLive: document.querySelector('.sandbox-status').hasAttribute('aria-live')
+  }));
+  check(
+    'only the message is a live region, never the typo note',
+    live.live.length === 1 && !live.statusLive,
+    JSON.stringify(live)
+  );
   await page.close();
+
+  // A long note at the pen's width is read in full: it wraps on its own line and
+  // is never clipped or scrolled.
+  const narrow = await browser.newPage({ viewport: { width: 900, height: 520 } });
+  await narrow.goto(`${base}/test/fixtures/sandbox-typo-and-gif.html`);
+  await narrow.waitForTimeout(900);
+  const note = await narrow.evaluate(() => {
+    const el = document.querySelector('.sandbox-status');
+    return { scroll: el.scrollHeight, client: el.clientHeight, text: el.textContent.length };
+  });
+  check(
+    'a long typo note at 900px is not clipped',
+    note.text > 100 && note.scroll <= note.client,
+    JSON.stringify(note)
+  );
+  await narrow.close();
 
   const reduced = await browser.newPage({ reducedMotion: 'reduce' });
   await reduced.goto(`${base}/test/fixtures/sandbox-attributes.html`);
@@ -784,6 +818,18 @@ async function consoleTest(browser, base) {
     'a system that asks for reduced motion starts with Reduce flash on',
     quiet.flash === 0.15 && quiet.ticked === true,
     JSON.stringify(quiet)
+  );
+  const pressed = await reduced.evaluate(() => {
+    const sheet = [...document.styleSheets].find((x) => (x.href || '').includes('sandbox.css'));
+    const rule = [...sheet.cssRules].find(
+      (r) => r.media && r.media.mediaText.includes('prefers-reduced-motion')
+    );
+    return rule ? rule.cssText : '';
+  });
+  check(
+    'reduced motion removes the press scale',
+    /transform:\s*none/.test(pressed),
+    pressed.slice(0, 80)
   );
   await reduced.close();
 }

@@ -241,7 +241,7 @@ same app looked like two products. This section is the contract that closes that
 | `.field-file::file-selector-button` pill | "Choose a song" and "Choose a GIF" (`.field-button`), each under a `.field-label`. The native input stays inside the label for its picker and focus, visually hidden: its "No file chosen" text does not fit a 900px rail, and the rail names the file once it plays. |
 | The three-band instrument (`.band`, `.band-track`, `.band-fill`, `.band-input`) | The three boosts. Fill = live post-boost level, thumb = boost. Same 0.1 to 3 range. The track is 36px high, not 42px: the pen's stage is short inside CodePen, and the rail already takes two rows. |
 | `.band-name`, `.band-value` | Band label and the boost number, tabular |
-| `.readout-status` role | The status line. Its type is larger (12px, `--label-2`) and it wraps, because here it carries typo notes a student must read. |
+| `.readout-status` role | The status line, on its own full-width line under the music controls, like the error-banner row. Its type is larger (12px, `--label-2`), and it wraps and never scrolls, because here it carries typo notes a student must read in full. Only the latest message is an `aria-live` region; the typo note beside it is not, so a screen reader does not repeat it. |
 | Console material, edge, scrim | The rail |
 | Press and hover rules, `--press`, `--ease-out` | All controls |
 
@@ -253,7 +253,7 @@ app.
 ### What differs, and why
 
 - **Two rows, not one.** Row 1 is the music: DJ name, Play a YouTube tab, Song, GIF,
-  Reduce flash, status. Row 2 is the three-band instrument across the full width. The main app's
+  Reduce flash, then the status on its own line. Row 2 is the three-band instrument across the full width. The main app's
   one-row rule protects an operator's view of the stage. The pen has more controls, a
   900px frame, and a student who must read every label, so each control stays full size
   on two rows.

@@ -235,16 +235,16 @@ class DJVisualizerSandbox extends HTMLElement {
     // that came out wrong is not, so that explanation is the one that must
     // survive the collision.
     this.typoNote = notes.join(' ');
-    this.status.textContent = this.typoNote;
+    this.noteLine.textContent = this.typoNote + ' ';
+    this.message.textContent = '';
   }
 
-  // Every message the rail shows goes through here, so a second one joins the
-  // first instead of replacing it. The typo note is the one that has to survive:
-  // a student who presses the big labelled play button before reading small grey
-  // text used to lose the only explanation of why their name vanished. useTab
-  // destroyed it on the click, before the picker even opened.
+  // Every message the rail shows goes through here. It replaces the message and
+  // never the typo note, which sits in its own element beside it: a student who
+  // presses the big play button before reading the small grey text used to lose
+  // the only explanation of why their name vanished.
   say(text) {
-    this.status.textContent = this.typoNote ? this.typoNote + ' ' + text : text;
+    this.message.textContent = text;
   }
 
   // Every hook DJVisualizer.init() reaches for without a null guard is built
@@ -315,10 +315,16 @@ class DJVisualizerSandbox extends HTMLElement {
     this.modeSelect.value = MODES.indexOf(mode) === -1 ? DEFAULT_MODE : mode;
     controls.appendChild(this.modeSelect);
 
-    this.status = document.createElement('span');
+    // Two parts. The typo note is written once at boot and stays; the message
+    // changes with every step. Only the message is a live region, so a screen
+    // reader says each new message once, without the whole note again.
+    this.status = document.createElement('p');
     this.status.className = 'sandbox-status';
-    this.status.setAttribute('aria-live', 'polite');
-    this.status.textContent = 'Pick your music to start';
+    this.noteLine = document.createElement('span');
+    this.message = document.createElement('span');
+    this.message.setAttribute('aria-live', 'polite');
+    this.message.textContent = 'Pick your music to start';
+    this.status.append(this.noteLine, this.message);
     controls.appendChild(this.status);
 
     this.rail.appendChild(this.buildBands());
