@@ -1,34 +1,53 @@
 # Station links
 
-One CodePen pen per station. Students open the link, edit, and reload. No account, and
-nothing to save. These URLs are what the workshop lead's session tracker holds.
+Every station uses the same CodePen pen. Students open the link and edit the HTML and CSS boxes.
+They need no account. CodePen keeps each student's changes in their own browser tab, so
+one student's edits never reach another station. These URLs are what the workshop lead's
+session tracker holds.
 
-Created by Waskar from the template at `sandbox/index.html`, with the local `../app/`
-paths replaced by absolute ones. Every line below must sit in the pen's `<head>`, above
-the student's editable part, exactly as the shipped file does: the browser reads a page
-top to bottom, so if a student's own mistake sits above these lines, it can stop them
-from loading at all.
+**Template pen:** <https://codepen.io/Waskar-Paulino-the-encoder/pen/Wbpjeax?editors=1110>
 
-```html
-<head>
-  <link rel="stylesheet" href="https://dj-visualizer.netlify.app/sandbox/sandbox.css" />
-  <script src="https://dj-visualizer.netlify.app/vendor/p5.min.js"></script>
-  <script src="https://dj-visualizer.netlify.app/app/audioProcessor.js"></script>
-  <script src="https://dj-visualizer.netlify.app/app/visualizer.js"></script>
-  <script src="https://dj-visualizer.netlify.app/sandbox/engine.js"></script>
+The `?editors=1110` part opens the HTML, CSS, and JS boxes. The console stays closed.
 
-  <!-- The student's editable part starts below this line. -->
-</head>
-```
+## What is in the pen
 
-| Station | Pen URL | Checked on a Chromebook |
-| --- | --- | --- |
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
+The pen's source lives in [`codepen/`](codepen/). Change it there first, then paste it
+into the pen and save the pen. The two must stay the same.
 
-Fill the table when the pens exist. An empty row is a station without a link, which on
-the day is a student without a screen.
+| File | Where it goes in the pen |
+| --- | --- |
+| [`codepen/head.html`](codepen/head.html) | Settings, HTML, "Stuff for `<head>`" |
+| [`codepen/html-panel.html`](codepen/html-panel.html) | The HTML box: name, mode, boosts, and GIF |
+| [`codepen/css-panel.css`](codepen/css-panel.css) | The CSS box: the three colours |
+| [`codepen/js-panel.js`](codepen/js-panel.js) | The JS box: a note only. Students do not edit it |
+
+The head lines load the machine from the live site. CodePen puts them in the page's
+`<head>`, above the HTML box. That keeps the rule from `sandbox/index.html`: the browser
+reads a page from the top down, so a student's typo in the HTML box cannot stop the
+machine from loading. Do not move these lines into CodePen's "Add External Scripts"
+list. CodePen places that list after the HTML box, below the student's part, where
+one missing quote mark can swallow it.
+
+## How the pen differs from `sandbox/index.html`
+
+- **Three boxes.** The colours are in the CSS box. The name, mode, boosts, and GIF are in the HTML
+  box. The JS box holds only a note that says where the machine's code lives. CodePen puts
+  the CSS box in `<head>` as its own style sheet, so an HTML typo cannot swallow the
+  colours, and a CSS typo cannot touch the HTML.
+- **No `<title>` edit.** The pen runs in a frame, so a student's title never reaches the
+  browser tab.
+- **No reload.** CodePen updates the picture by itself when the student stops typing. A
+  student who reloads the whole page loses their changes, because they have no account
+  to save to.
+- **Music stops on each change.** Each update starts the picture again, so the student
+  presses Play again after every edit.
+
+## Checked
+
+| Check | Result |
+| --- | --- |
+| The machine loads in the pen (2026-09-22, Chrome on macOS) | Yes |
+| A missing quote mark in `dj-name` does not stop the machine (2026-09-22) | Yes |
+| CodePen's frame allows the microphone and tab sharing (`allow` includes `microphone` and `display-capture`) | Yes |
+| Tab audio plays through the visualizer in the pen (2026-09-22, Chrome on macOS, YouTube tab) | Yes |
+| The pen works on a Coded by: Chromebook | Not yet |

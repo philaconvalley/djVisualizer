@@ -31,7 +31,18 @@ const MODES = [
 ];
 
 const DEFAULT_MODE = 'flow';
-const RAIL_HEIGHT = 64;
+
+// Two rows: the music controls, then the three boosts. The visualizer keeps its
+// drawing above this line, so it has to match the rail's height in sandbox.css.
+const RAIL_HEIGHT = 104;
+
+// "Code how hard it hits" — the workshop's own promise. Each band's reading is
+// multiplied by its boost before the visualizer sees it, exactly as the main
+// app's three sliders do (app/app.js), and over the same range.
+const BOOST_BANDS = ['bass', 'mid', 'high'];
+const BOOST_MIN = 0.1;
+const BOOST_MAX = 3;
+const BOOST_STEP = 0.1;
 
 // The same three values sandbox/index.html ships in its :root block. They are
 // repeated here because a student's typo can delete that block entirely — an
@@ -64,6 +75,9 @@ class DJVisualizerSandbox extends HTMLElement {
     if (this.booted) return;
     this.booted = true;
 
+    // Before buildDom, because each slider starts where the student's code says.
+    this.boostReport = this.readBoosts();
+
     this.buildDom(this.getAttribute('dj-name') || '', this.getAttribute('mode') || '');
 
     this.processor = new AudioProcessor();
@@ -76,13 +90,48 @@ class DJVisualizerSandbox extends HTMLElement {
     this.visualizer.setRailHeight(RAIL_HEIGHT);
     this.visualizer.currentMode = this.modeSelect.value;
 
-    this.processor.onDataUpdate = (data) => this.visualizer.updateAudioData(data);
+    this.processor.onDataUpdate = (data) =>
+      this.visualizer.updateAudioData({
+        ...data,
+        bass: data.bass * this.boosts.bass,
+        mid: data.mid * this.boosts.mid,
+        high: data.high * this.boosts.high
+      });
     this.processor.onBeat = () => this.visualizer.onBeatEvent();
 
     this.reportTypos();
     this.applyGif(this.getAttribute('gif'));
 
     window.djSandbox = this;
+  }
+
+  // Reads bass-boost, mid-boost and high-boost. Like every other value in the
+  // student's file, a boost that does not parse is replaced, never thrown on.
+  // A missing attribute is not a mistake: it means "leave it at 1". A word
+  // where a number belongs, or a number past the slider's ends, is one, and
+  // reportTypos says which.
+  readBoosts() {
+    this.boosts = {};
+    const report = { unreadable: [], clamped: [] };
+
+    for (const band of BOOST_BANDS) {
+      const written = (this.getAttribute(band + '-boost') || '').trim();
+      const value = Number(written);
+
+      if (!written) {
+        this.boosts[band] = 1;
+      } else if (!Number.isFinite(value)) {
+        report.unreadable.push(band + '-boost');
+        this.boosts[band] = 1;
+      } else if (value < BOOST_MIN || value > BOOST_MAX) {
+        report.clamped.push(band + '-boost');
+        this.boosts[band] = Math.min(BOOST_MAX, Math.max(BOOST_MIN, value));
+      } else {
+        this.boosts[band] = value;
+      }
+    }
+
+    return report;
   }
 
   // DJVisualizer.parseColor accepts #rrggbb and rgb() and nothing else. So
@@ -154,9 +203,32 @@ class DJVisualizerSandbox extends HTMLElement {
           '.'
       );
     }
+    if (this.boostReport.unreadable.length) {
+      notes.push(
+        'These boosts are not numbers, so I used 1: ' + this.boostReport.unreadable.join(', ') + '.'
+      );
+    }
+    if (this.boostReport.clamped.length) {
+      notes.push(
+        'Boosts go from ' +
+          BOOST_MIN +
+          ' to ' +
+          BOOST_MAX +
+          ', so I moved these to the nearest end: ' +
+          this.boostReport.clamped.join(', ') +
+          '.'
+      );
+    }
     if (!notes.length) return;
 
-    notes.push('Look for a missing quote mark, or a note with no closing arrow, then reload.');
+    // No "reload" here. In the CodePen pen a student has no account, and a
+    // reload throws away every change they made. The pen updates on its own.
+    if (this.rebuilt) {
+      notes.push('Look for a missing quote mark, or a note with no closing arrow.');
+    }
+    if (this.paletteReport.missing.length || this.paletteReport.unreadable.length) {
+      notes.push('In your colours, look for a missing ; or a note with no */ at its end.');
+    }
 
     // Kept, because every later message lands on the same line: the GIF's
     // callback, and everything useTab and useFile report.
@@ -187,26 +259,33 @@ class DJVisualizerSandbox extends HTMLElement {
     stage.appendChild(host);
     this.appendChild(stage);
 
+    // One container, two rows. Every word a student may read lives inside
+    // .sandbox-rail, which is how the tests tell rail text from text that
+    // escaped a comment.
     const rail = document.createElement('div');
     rail.className = 'sandbox-rail';
+
+    const controls = document.createElement('div');
+    controls.className = 'sandbox-controls';
+    rail.appendChild(controls);
 
     const label = document.createElement('span');
     label.className = 'sandbox-name';
     label.textContent = name;
-    rail.appendChild(label);
+    controls.appendChild(label);
 
     this.tabButton = document.createElement('button');
     this.tabButton.type = 'button';
     this.tabButton.textContent = 'Play a YouTube tab';
     this.tabButton.addEventListener('click', () => this.useTab());
-    rail.appendChild(this.tabButton);
+    controls.appendChild(this.tabButton);
 
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
     this.fileInput.accept = 'audio/*,video/*';
     this.fileInput.className = 'sandbox-file';
     this.fileInput.addEventListener('change', () => this.useFile());
-    rail.appendChild(this.fileInput);
+    controls.appendChild(this.fileInput);
 
     // DJVisualizer.init() attaches a change listener to this without a guard.
     // Students never see it; the mode is an attribute on the element.
@@ -220,15 +299,60 @@ class DJVisualizerSandbox extends HTMLElement {
       this.modeSelect.appendChild(option);
     }
     this.modeSelect.value = MODES.indexOf(mode) === -1 ? DEFAULT_MODE : mode;
-    rail.appendChild(this.modeSelect);
+    controls.appendChild(this.modeSelect);
 
     this.status = document.createElement('span');
     this.status.className = 'sandbox-status';
     this.status.setAttribute('aria-live', 'polite');
     this.status.textContent = 'Pick your music to start';
-    rail.appendChild(this.status);
+    controls.appendChild(this.status);
 
+    rail.appendChild(this.buildBoosts());
     this.appendChild(rail);
+  }
+
+  // The second row of the rail. A slider changes the picture while the music
+  // plays; a CodePen edit restarts the picture and stops the music. So a
+  // student finds the value they like here, reads the number, and writes it
+  // into their code so it stays. The number is the bridge between the two.
+  buildBoosts() {
+    const row = document.createElement('div');
+    row.className = 'sandbox-boosts';
+    this.boostSliders = {};
+
+    for (const band of BOOST_BANDS) {
+      const label = document.createElement('label');
+      label.className = 'sandbox-boost';
+      // Each slider wears its own band's colour, so the student sees which
+      // colour on the stage they are about to turn up.
+      label.style.setProperty('--band', 'var(--' + band + ')');
+
+      const name = document.createElement('span');
+      name.className = 'sandbox-boost-name';
+      name.textContent = band + '-boost';
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = String(BOOST_MIN);
+      slider.max = String(BOOST_MAX);
+      slider.step = String(BOOST_STEP);
+      slider.value = String(this.boosts[band]);
+
+      const value = document.createElement('output');
+      value.className = 'sandbox-boost-value';
+      value.textContent = this.boosts[band].toFixed(1);
+
+      slider.addEventListener('input', () => {
+        this.boosts[band] = Number(slider.value);
+        value.textContent = this.boosts[band].toFixed(1);
+      });
+
+      label.append(name, slider, value);
+      row.appendChild(label);
+      this.boostSliders[band] = slider;
+    }
+
+    return row;
   }
 
   // A GIF is optional and its path is the one student value that can point at

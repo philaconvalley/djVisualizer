@@ -316,6 +316,17 @@ async function shippedTemplateTest(browser, base) {
   check('the shipped template paints', state.painted);
   check('the shipped template shows its dj-name', state.name === 'DJ NOVA', String(state.name));
   check('the shipped template uses its mode', state.mode === 'flow', String(state.mode));
+  const shippedBoosts = await page.evaluate(() =>
+    window.djSandbox ? { ...window.djSandbox.boosts } : null
+  );
+  check(
+    'the shipped template starts every boost at 1',
+    !!shippedBoosts &&
+      shippedBoosts.bass === 1 &&
+      shippedBoosts.mid === 1 &&
+      shippedBoosts.high === 1,
+    JSON.stringify(shippedBoosts)
+  );
   check(
     "the shipped template's --bass reaches the canvas",
     state.colours && String(state.colours.bass) === '255,69,58',
@@ -560,6 +571,83 @@ async function quietWhenCorrectTest(browser, base) {
   await page.close();
 }
 
+// "Code how hard it hits." A boost the student wrote reaches both the slider
+// and the numbers the visualizer draws from. A word or a number past the
+// slider's ends is replaced, never thrown on, and the rail names it. Moving a
+// slider changes the next reading without a restart, which is the reason the
+// sliders exist: a CodePen edit restarts the picture and stops the music.
+async function boostTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-boosts.html');
+
+  const state = await page.evaluate(() => {
+    const el = window.djSandbox;
+    if (!el) return null;
+    const feed = () => {
+      el.processor.onDataUpdate({ bass: 0.5, mid: 0.5, high: 0.5, bpm: 0 });
+      const d = el.visualizer.audioData;
+      return { bass: d.bass, mid: d.mid, high: d.high };
+    };
+    const boosts = { ...el.boosts };
+    const sliders = Object.fromEntries(
+      Object.entries(el.boostSliders).map(([band, input]) => [band, input.value])
+    );
+    const before = feed();
+    const slider = el.boostSliders.bass;
+    slider.value = '0.5';
+    slider.dispatchEvent(new Event('input'));
+    const after = feed();
+    return {
+      boosts,
+      sliders,
+      before,
+      after,
+      shown: slider.parentElement.querySelector('.sandbox-boost-value').textContent,
+      status: document.querySelector('.sandbox-status').textContent,
+      inRail: !!document.querySelector('.sandbox-rail .sandbox-boosts')
+    };
+  });
+
+  check('the boost fixture throws nothing', thrown.length === 0, thrown.join(' | '));
+  check('the boost fixture boots', !!state);
+  if (!state) {
+    await page.close();
+    return;
+  }
+
+  check('a written boost is applied', state.boosts.bass === 2, JSON.stringify(state.boosts));
+  check('a word in a boost falls back to 1', state.boosts.mid === 1, JSON.stringify(state.boosts));
+  check(
+    'a boost past the top is moved to 3',
+    state.boosts.high === 3,
+    JSON.stringify(state.boosts)
+  );
+  check(
+    'each slider starts where the code says',
+    state.sliders.bass === '2' && state.sliders.mid === '1' && state.sliders.high === '3',
+    JSON.stringify(state.sliders)
+  );
+  check(
+    'the boost reaches the numbers the visualizer draws from',
+    state.before.bass === 1 && state.before.mid === 0.5 && state.before.high === 1.5,
+    JSON.stringify(state.before)
+  );
+  check(
+    'moving a slider changes the next reading',
+    state.after.bass === 0.25,
+    JSON.stringify(state.after)
+  );
+  check('the slider shows its number', state.shown === '0.5', state.shown);
+  check(
+    'the rail names the boost that is not a number',
+    state.status.includes('mid-boost'),
+    state.status
+  );
+  check('the rail names the boost past the end', state.status.includes('high-boost'), state.status);
+  check('the boosts sit inside the rail', state.inRail);
+
+  await page.close();
+}
+
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
 // string", and the proxy fails for everything thrown inside attachStream —
 // a failed audioWorklet.addModule most of all. These two stubs are the two
@@ -718,6 +806,7 @@ try {
   await brokenMarkupTest(browser, BASE);
   await brokenHeadCommentTest(browser, BASE);
   await quietWhenCorrectTest(browser, BASE);
+  await boostTest(browser, BASE);
   await errorWordingTest(browser, BASE);
   await modeFallbackTest(browser, BASE);
   await gifMissingTest(browser, BASE);

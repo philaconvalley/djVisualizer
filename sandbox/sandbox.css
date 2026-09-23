@@ -32,18 +32,61 @@ dj-visualizer {
   inset: 0;
 }
 
+/* Two rows, 64px of music controls over 40px of boosts. The total is
+   RAIL_HEIGHT in engine.js, which keeps the drawing above the rail. Change one,
+   change the other. */
 .sandbox-rail {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
+  height: 104px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(28, 28, 30, 0.86);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.sandbox-controls {
   height: 64px;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 20px;
-  background: rgba(28, 28, 30, 0.86);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.sandbox-boosts {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sandbox-boost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(235, 235, 245, 0.8);
+}
+
+/* The name is written exactly as the attribute is spelled, so the student can
+   find it in their code. */
+.sandbox-boost-name {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.sandbox-boost input {
+  width: 110px;
+  accent-color: var(--band);
+}
+
+.sandbox-boost-value {
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
 }
 
 .sandbox-name {

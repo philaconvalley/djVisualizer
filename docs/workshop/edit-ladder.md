@@ -2,35 +2,42 @@
 
 For the workshop. The first session is middle school. The second is high school.
 
-Each rung is one small edit. Change the value. Reload the page. Look at the screen.
-The music and the picture keep going no matter what you type in your part of the file.
+Each rung is one small edit. Change the value. Stop typing. The picture updates by itself.
+Press Play again to bring your music back. Do not reload the page: CodePen forgets your
+changes when you do.
+A typo in your part of the file never stops the machine. The picture always comes back.
 
 ## Start here
 
 1. **Pick your music.** Press **Play a YouTube tab**. Choose the tab playing your song.
    Tick **Share tab audio**. If that does not work, plug in the station USB stick. Choose
    a song file instead.
-2. **Change one colour.** Find `--bass` near the top. Change `#ff453a` to `#ffcc00`.
-   Reload. The low drums are now yellow.
+2. **Change one colour.** Find `--bass` in the CSS box. Change `#ff453a` to `#ffcc00`.
+   Press Play. The low drums are now yellow.
 
 Stop here. Look at the screen while a song plays. Watch which colour moves when.
 
 ## Level up
 
-3. **Name your page.** Change the text inside `<title>`. Reload. Look at the browser tab.
-4. **Name yourself.** Change `dj-name="DJ NOVA"` to your DJ name.
-5. **Change the whole look.** Change `mode="flow"` to one of these, one at a time:
+3. **Name yourself.** Change `dj-name="DJ NOVA"` to your DJ name.
+4. **Change the whole look.** Change `mode="flow"` to one of these, one at a time:
    `spectrum`, `particles`, `rings`, `waves`, `mandala`, `tunnel`, `galaxy`, `polygons`.
+5. **Turn up the drums.** While a song plays, move the `bass-boost` slider under the
+   picture. Watch your bass colour move harder. When you like it, read the number next to the
+   slider. Write that number into `bass-boost="1.0"` in your code, so it stays.
 
 ## Boss
 
-6. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
-   Choose values that go together this time. Reload. Look at the screen. You are done when
+6. **Code how hard it hits.** Set all three boosts in your code: `bass-boost`,
+   `mid-boost`, and `high-boost`. Make the part of your song you love hit hardest. Calm
+   the part you do not. Each boost goes from `0.1` to `3.0`.
+7. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
+   Choose values that go together this time. Press Play. Look at the screen. You are done when
    the three colours look like they belong to the same song.
-7. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
+8. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
    If the name is wrong, the page tells you. The music keeps playing either way.
-8. **Explain your choice.** Tell the person next to you which colour you gave the bass,
-   and why that fits your song.
+9. **Explain your choice.** Tell the person next to you which colour and which boost you
+   gave the bass, and why that fits your song.
 
 ## If something looks wrong
 

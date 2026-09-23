@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- TEST FIXTURE for test/verify-sandbox.mjs. One boost of each kind: a good
+     number, a word where a number belongs, and a number past the slider's top.
+     It lives here, not in sandbox/, for the reason sandbox-attributes.html
+     gives. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script src="../../app/audioProcessor.js"></script>
+    <script src="../../app/visualizer.js"></script>
+    <script src="../../sandbox/engine.js"></script>
+
+    <title>Sandbox fixture</title>
+
+    <style>
+      :root {
+        --bass: #ff453a;
+        --mid: #30d158;
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <dj-visualizer
+      dj-name="TEST DJ"
+      mode="rings"
+      bass-boost="2"
+      mid-boost="loud"
+      high-boost="9"
+      gif=""
+    ></dj-visualizer>
+  </body>
+</html>
