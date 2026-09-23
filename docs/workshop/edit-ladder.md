@@ -22,16 +22,22 @@ Stop here. Look at the screen while a song plays. Watch which colour moves when.
 3. **Name yourself.** Change `dj-name="DJ NOVA"` to your DJ name.
 4. **Change the whole look.** Change `mode="flow"` to one of these, one at a time:
    `spectrum`, `particles`, `rings`, `waves`, `mandala`, `tunnel`, `galaxy`, `polygons`.
+5. **Turn up the drums.** While a song plays, move the `bass-boost` slider under the
+   picture. Watch your bass colour move harder. When you like it, read the number next to the
+   slider. Write that number into `bass-boost="1.0"` in your code, so it stays.
 
 ## Boss
 
-5. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
+6. **Code how hard it hits.** Set all three boosts in your code: `bass-boost`,
+   `mid-boost`, and `high-boost`. Make the part of your song you love hit hardest. Calm
+   the part you do not. Each boost goes from `0.1` to `3.0`.
+7. **Pick your three colours as a set.** Change `--bass`, `--mid`, and `--high` again.
    Choose values that go together this time. Press Play. Look at the screen. You are done when
    the three colours look like they belong to the same song.
-6. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
+8. **Add your GIF.** Upload your GIF in CodePen. Copy its address. Paste it into `gif=""`.
    If the name is wrong, the page tells you. The music keeps playing either way.
-7. **Explain your choice.** Tell the person next to you which colour you gave the bass,
-   and why that fits your song.
+9. **Explain your choice.** Tell the person next to you which colour and which boost you
+   gave the bass, and why that fits your song.
 
 ## If something looks wrong
 

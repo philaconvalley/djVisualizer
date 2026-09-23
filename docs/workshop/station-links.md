@@ -17,7 +17,7 @@ into the pen and save the pen. The two must stay the same.
 | File | Where it goes in the pen |
 | --- | --- |
 | [`codepen/head.html`](codepen/head.html) | Settings, HTML, "Stuff for `<head>`" |
-| [`codepen/html-panel.html`](codepen/html-panel.html) | The HTML box: name, mode, and GIF |
+| [`codepen/html-panel.html`](codepen/html-panel.html) | The HTML box: name, mode, boosts, and GIF |
 | [`codepen/css-panel.css`](codepen/css-panel.css) | The CSS box: the three colours |
 | [`codepen/js-panel.js`](codepen/js-panel.js) | The JS box: a note only. Students do not edit it |
 
@@ -30,7 +30,7 @@ one missing quote mark can swallow it.
 
 ## How the pen differs from `sandbox/index.html`
 
-- **Three boxes.** The colours are in the CSS box. The name, mode, and GIF are in the HTML
+- **Three boxes.** The colours are in the CSS box. The name, mode, boosts, and GIF are in the HTML
   box. The JS box holds only a note that says where the machine's code lives. CodePen puts
   the CSS box in `<head>` as its own style sheet, so an HTML typo cannot swallow the
   colours, and a CSS typo cannot touch the HTML.

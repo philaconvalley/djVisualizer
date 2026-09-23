@@ -33,12 +33,25 @@
   </head>
 
   <body>
-    <!-- 3. Your name, your look, and your GIF.
+    <!-- 3. Your name, your look, your boosts, and your GIF.
          mode can be: spectrum, particles, rings, waves, mandala,
                       tunnel, galaxy, polygons, flow
          gif takes over the stage when you fill it in, so it replaces mode.
-         Leave gif empty to keep the mode you picked. -->
-    <dj-visualizer dj-name="DJ NOVA" mode="flow" gif=""></dj-visualizer>
+         Leave gif empty to keep the mode you picked.
+
+         The boosts set how hard each part of the music hits: bass for the
+         drums, mid for the voice, high for the cymbals. 1.0 is normal.
+         Go up to 3.0 to make it hit harder, or down to 0.1 to calm it.
+         Try the sliders under the picture first. When you like a number,
+         write it here so it stays. -->
+    <dj-visualizer
+      dj-name="DJ NOVA"
+      mode="flow"
+      bass-boost="1.0"
+      mid-boost="1.0"
+      high-boost="1.0"
+      gif=""
+    ></dj-visualizer>
 
     <!-- ========================== YOUR PART ENDS HERE ==========================
          Everything between those two lines is yours. Change it, misspell it,
