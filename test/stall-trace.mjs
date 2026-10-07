@@ -239,6 +239,8 @@ try {
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
   await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
+  // The photosensitivity warning comes first and blocks the page until answered.
+  await page.click('#flashWarningContinue');
   await page.bringToFront();
   await page.click('#start');
   await page.waitForTimeout(3000);

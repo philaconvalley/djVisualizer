@@ -122,11 +122,16 @@ checked by hand with `sandbox/probe.html`.
 
 ## Photosensitivity
 
-This visualizer produces full-field luminance changes in time with the music and
-is designed to be projected. There is a **Reduce flash** control in the console;
-it turns itself on automatically if your system asks for reduced motion, and it
-can be overridden in either direction. If you are running this in front of an
-audience, leave the warning on the start screen visible until you begin.
+This visualizer reacts to music with changes in brightness and is designed to be
+projected. It never shows more than three flashes in any one second (WCAG 2.3.1):
+a flash guard measures every frame and dims any frame that would break that limit.
+The limit is not a setting.
+
+Every visitor sees a warning first, with a **Reduce motion** option. The same
+control sits in the console. It switches to slow visuals with no flashing, turns
+itself on if your system asks for reduced motion, and can be overridden in either
+direction. To check the limit on your own machine, load the app with `?flashlog`
+and read the `[flash]` lines in the browser console.
 
 ## Project structure
 

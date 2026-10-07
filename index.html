@@ -32,7 +32,7 @@
       <p class="stage-hint" id="stageHint">
         Press Start to read the room
         <span class="stage-warn"
-          >Flashing imagery &mdash; use Reduce flashing if that is a concern</span
+          >Flashing imagery &mdash; use Reduce motion if that is a concern</span
         >
       </p>
     </main>
@@ -153,9 +153,9 @@
           <p class="readout-status" id="deviceStatus" aria-live="polite">No device selected</p>
         </div>
 
-        <label class="toggle" title="Reduce large flashing changes in the visuals">
-          <input type="checkbox" id="reduceFlash" />
-          <span>Reduce flash</span>
+        <label class="toggle" title="Switch to slow, low-motion visuals with no flashing">
+          <input type="checkbox" id="reduceMotion" />
+          <span>Reduce motion</span>
         </label>
 
         <button id="fullscreen" class="ghost" type="button">Fullscreen</button>
@@ -239,13 +239,30 @@
             the sensitivity controls change how the visuals respond, never what BPM reports.
           </li>
           <li>
-            This visualizer flashes in time with the music. Use the Reduce flashing control in the
-            console to damp it; it turns itself on if your system asks for reduced motion.
+            This visualizer flashes in time with the music, never more than three times a second.
+            Reduce motion switches to slow visuals with no flashing; it turns itself on if your
+            system asks for reduced motion.
           </li>
         </ul>
         <p class="help-close">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</p>
       </div>
     </div>
+
+    <!-- Shown before anything else, on every device. Spec §3.2: the warning has
+         to come before the visuals, with the calm option in the same view. -->
+    <dialog
+      id="flashWarning"
+      class="flash-warning"
+      aria-labelledby="flashWarningTitle"
+      aria-describedby="flashWarningBody"
+    >
+      <h2 id="flashWarningTitle">Heads up: flashing visuals.</h2>
+      <p id="flashWarningBody">This reacts to live music and flashes.</p>
+      <div class="flash-warning-actions">
+        <button id="flashWarningContinue" class="transport" type="button">Continue</button>
+        <button id="flashWarningReduce" class="ghost" type="button">Reduce motion</button>
+      </div>
+    </dialog>
 
     <script src="app/audioProcessor.js"></script>
     <script src="app/visualizer.js"></script>

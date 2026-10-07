@@ -561,22 +561,23 @@
       return { bass: bandVerdict('solo-bass', 'bass'), hats: bandVerdict('solo-hats', 'high') };
     },
 
-    /** Step 8: beat-accent energy with Reduce flash off, then on. */
+    /** Step 8: Reduce motion off, then on. Records the calm path's state and,
+     *  if the app was loaded with ?flashlog, the worst flash window seen. */
     async flashCheck(secs = 12) {
-      const box = document.getElementById('reduceFlash');
+      const box = document.getElementById('reduceMotion');
       const cue = makeCue();
-      const peak = () => vis().flashIntensity;
+      const meter = () => (vis().flashMeter ? { ...vis().flashMeter.worst } : null);
       box.checked = false;
       box.dispatchEvent(new Event('change'));
-      await cue.hold('REDUCE FLASH: OFF', 'flash-off', secs);
-      const off = peak();
+      await cue.hold('REDUCE MOTION: OFF', 'flash-off', secs);
+      const off = { reducedMotion: vis().reducedMotion, worst: meter() };
       box.checked = true;
       box.dispatchEvent(new Event('change'));
-      await cue.hold('REDUCE FLASH: ON', 'flash-on', secs);
-      const on = peak();
+      await cue.hold('REDUCE MOTION: ON', 'flash-on', secs);
+      const on = { reducedMotion: vis().reducedMotion, beat: vis().beat, worst: meter() };
       this.mark('flash-done');
       await cue.done('DONE', '', 2000);
-      return { flashIntensityOff: off, flashIntensityOn: on, damped: on < off };
+      return { off, on, calm: on.reducedMotion && on.beat === 0 };
     },
 
     bandVerdict,
