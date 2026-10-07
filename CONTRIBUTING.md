@@ -190,8 +190,11 @@ thing to look at, because "it looked fine" is not a check.
    rail is legible from the back of the room and that nothing important sits
    underneath it.
 9. **Check the flash ceiling.** Load the app with `?flashlog`, play the loudest
-   track of the set, and read the `[flash]` lines in the console. `flashes` and
-   `redFlashes` must stay at 3 or less. Then toggle **Reduce motion** and confirm
+   track of the set, and walk through every mode. The console prints one
+   `[flash]` line a second per mode: `flashes` and `redFlashes` must stay at 3
+   or less. The same line gives FPS and the guard's cost in ms per frame; FPS
+   under `?flashlog` reads a little low, because the meter reads every frame a
+   second time. Then toggle **Reduce motion** and confirm
    the beat strikes stop and the stage only glides. This is a safety control, not
    a preference — see below.
 

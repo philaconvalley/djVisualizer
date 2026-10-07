@@ -45,16 +45,23 @@
  *     definition: a pixel counts when R / (R + G + B) >= 0.8, and its value is
  *     (R - G - B) * 320, with channels in sRGB 0..1.
  *
- * Both are means over the whole canvas. A quarter of the screen going from
- * black to white moves the mean by 0.25, so the spec's "about a quarter of the
- * screen" rule is caught. Small accents changing fast are not, by design.
+ * Where it measures. WCAG counts a flash once it covers a quarter of the
+ * central ten degrees of vision — 341 x 256 pixels on a 1024 x 768 screen, a
+ * third of each dimension. A mean over the whole canvas dilutes a flash that
+ * size: a patch a ninth of the screen can swing hard while the whole-screen
+ * mean barely moves. So the guard measures overlapping regions a third of the
+ * width by a third of the height, half a region apart, and every region keeps
+ * its own count. A flash anywhere that size or larger lands mostly inside at
+ * least one region. A whole-screen flash lands in all of them.
  *
  * How the cap works. Falls toward dark are always allowed — darkening is never
  * the risk. A rise that would complete a transition is allowed only while the
  * last second holds four transitions or fewer, so the rise and the fall that
- * must follow it still fit inside six. Otherwise the guard dims the frame so it
- * stays just under the threshold above the last low point. The music keeps
- * playing; the screen holds a steady level until the window has room again.
+ * must follow it still fit inside six. Otherwise the guard dims the frame so
+ * that region stays just under the threshold above its last low point. The
+ * veil covers the whole frame; dimming only the region would draw a visible
+ * box. The music keeps playing; the screen holds a steady level until the
+ * window has room again.
  */
 
 // sRGB channel (0..255) to linear light, as a lookup table. Relative luminance
@@ -116,6 +123,26 @@ class TransitionCounter {
   }
 }
 
+// One luminance counter and one red counter per region.
+class RegionCounters {
+  constructor(count) {
+    this.luminance = [];
+    this.red = [];
+    for (let i = 0; i < count; i++) {
+      this.luminance.push(new TransitionCounter(FlashGuard.LUMINANCE_THRESHOLD));
+      this.red.push(new TransitionCounter(FlashGuard.RED_THRESHOLD));
+    }
+  }
+
+  // Flashes in the worst region over the last second. Half a flash still
+  // counts against the ceiling, so five transitions read as three.
+  worst(counters, now) {
+    let most = 0;
+    for (const counter of counters) most = Math.max(most, counter.count(now));
+    return Math.ceil(most / 2);
+  }
+}
+
 class FlashGuard {
   static WINDOW_MS = 1000;
   static MAX_FLASHES = 3;
@@ -124,72 +151,124 @@ class FlashGuard {
   // Hold a blocked frame at 80% of the threshold, not at it, so rounding in
   // the blend and the sample never tips a held frame over into a transition.
   static MARGIN = 0.8;
+  // The WCAG area, as a fraction of each dimension, and the step between
+  // neighbouring regions. Half a region apart means any patch that size
+  // overlaps some region by at least half its area.
+  static REGION = 1 / 3;
+  static STEP = 1 / 6;
 
   constructor() {
-    this.luminance = new TransitionCounter(FlashGuard.LUMINANCE_THRESHOLD);
-    this.red = new TransitionCounter(FlashGuard.RED_THRESHOLD);
+    this.layout = '';
+    this.regions = [];
+    this.counters = null;
   }
 
-  // Mean relative luminance of RGBA pixels, scaled by `k` (the veil).
-  static luminanceOf(pixels, k = 1) {
-    let sum = 0;
-    const n = pixels.length / 4;
-    for (let i = 0; i < pixels.length; i += 4) {
-      sum +=
-        0.2126 * SRGB_TO_LINEAR[Math.round(pixels[i] * k)] +
-        0.7152 * SRGB_TO_LINEAR[Math.round(pixels[i + 1] * k)] +
-        0.0722 * SRGB_TO_LINEAR[Math.round(pixels[i + 2] * k)];
+  // Overlapping rectangles, in grid cells, covering the whole grid edge to edge.
+  static regionsFor(cols, rows) {
+    const span = (size) => {
+      const length = Math.max(1, Math.round(size * FlashGuard.REGION));
+      const step = Math.max(1, Math.round(size * FlashGuard.STEP));
+      const count = Math.ceil((size - length) / step) + 1;
+      const starts = [];
+      for (let i = 0; i < count; i++) {
+        starts.push(count === 1 ? 0 : Math.round((i * (size - length)) / (count - 1)));
+      }
+      return { length, starts };
+    };
+    const across = span(cols);
+    const down = span(rows);
+    const regions = [];
+    for (const y of down.starts) {
+      for (const x of across.starts) regions.push({ x, y, w: across.length, h: down.length });
     }
-    return n ? sum / n : 0;
+    return regions;
   }
 
-  // Mean saturated-red measure. Scaling every channel by `k` keeps the ratio
-  // R / (R + G + B) and scales R - G - B, so the veil scales this linearly.
-  static redOf(pixels) {
+  // Mean relative luminance of one region, every channel scaled by `k`.
+  static luminanceOf(pixels, cols, region, k = 1) {
     let sum = 0;
-    const n = pixels.length / 4;
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i],
-        g = pixels[i + 1],
-        b = pixels[i + 2];
-      const total = r + g + b;
-      if (total > 0 && r / total >= 0.8) sum += Math.max(0, ((r - g - b) / 255) * 320);
+    for (let y = region.y; y < region.y + region.h; y++) {
+      for (let i = (y * cols + region.x) * 4, end = i + region.w * 4; i < end; i += 4) {
+        sum +=
+          0.2126 * SRGB_TO_LINEAR[Math.round(pixels[i] * k)] +
+          0.7152 * SRGB_TO_LINEAR[Math.round(pixels[i + 1] * k)] +
+          0.0722 * SRGB_TO_LINEAR[Math.round(pixels[i + 2] * k)];
+      }
     }
-    return n ? sum / n : 0;
+    return sum / (region.w * region.h);
+  }
+
+  // Mean saturated-red measure of one region. Scaling every channel by `k`
+  // keeps R / (R + G + B) and scales R - G - B, so the veil scales this
+  // linearly and it never needs a search.
+  static redOf(pixels, cols, region) {
+    let sum = 0;
+    for (let y = region.y; y < region.y + region.h; y++) {
+      for (let i = (y * cols + region.x) * 4, end = i + region.w * 4; i < end; i += 4) {
+        const r = pixels[i],
+          g = pixels[i + 1],
+          b = pixels[i + 2];
+        const total = r + g + b;
+        if (total > 0 && r / total >= 0.8) sum += Math.max(0, ((r - g - b) / 255) * 320);
+      }
+    }
+    return sum / (region.w * region.h);
+  }
+
+  // A resize changes what a region covers, so its history no longer applies.
+  ensureLayout(cols, rows) {
+    const layout = `${cols}x${rows}`;
+    if (layout === this.layout) return;
+    this.layout = layout;
+    this.regions = FlashGuard.regionsFor(cols, rows);
+    this.counters = new RegionCounters(this.regions.length);
   }
 
   // Takes the frame as it would be shown and returns the brightness scale to
   // apply to it: 1 leaves it alone, 0.4 dims every channel to 40%.
-  process(pixels, now) {
-    const rawLuminance = FlashGuard.luminanceOf(pixels);
-    const rawRed = FlashGuard.redOf(pixels);
+  process(pixels, cols, rows, now) {
+    this.ensureLayout(cols, rows);
+    const { regions, counters } = this;
+    const raw = regions.map((region) => ({
+      luminance: FlashGuard.luminanceOf(pixels, cols, region),
+      red: FlashGuard.redOf(pixels, cols, region)
+    }));
 
     let scale = 1;
-
-    const lumCeiling = this.luminance.ceiling(now);
-    if (rawLuminance > lumCeiling) {
+    regions.forEach((region, i) => {
+      const lumCeiling = counters.luminance[i].ceiling(now);
       // Luminance is not linear in the channel values, so search for the
-      // brightest scale that stays under the ceiling. Twelve halvings is
-      // finer than one 8-bit step.
-      let lo = 0,
-        hi = 1;
-      for (let i = 0; i < 12; i++) {
-        const mid = (lo + hi) / 2;
-        if (FlashGuard.luminanceOf(pixels, mid) <= lumCeiling) lo = mid;
-        else hi = mid;
+      // brightest scale that keeps this region under its ceiling. Twelve
+      // halvings is finer than one 8-bit step. Skipped when the scale already
+      // chosen for another region is enough.
+      if (
+        raw[i].luminance > lumCeiling &&
+        FlashGuard.luminanceOf(pixels, cols, region, scale) > lumCeiling
+      ) {
+        let lo = 0,
+          hi = scale;
+        for (let step = 0; step < 12; step++) {
+          const mid = (lo + hi) / 2;
+          if (FlashGuard.luminanceOf(pixels, cols, region, mid) <= lumCeiling) lo = mid;
+          else hi = mid;
+        }
+        scale = lo;
       }
-      scale = lo;
-    }
+      const redCeiling = counters.red[i].ceiling(now);
+      if (raw[i].red > redCeiling) scale = Math.min(scale, redCeiling / raw[i].red);
+    });
 
-    const redCeiling = this.red.ceiling(now);
-    if (rawRed > redCeiling) scale = Math.min(scale, redCeiling / rawRed);
+    const shown = regions.map((region, i) => ({
+      luminance:
+        scale === 1 ? raw[i].luminance : FlashGuard.luminanceOf(pixels, cols, region, scale),
+      red: raw[i].red * scale
+    }));
+    shown.forEach((value, i) => {
+      counters.luminance[i].observe(value.luminance, now);
+      counters.red[i].observe(value.red, now);
+    });
 
-    const shownLuminance = scale === 1 ? rawLuminance : FlashGuard.luminanceOf(pixels, scale);
-    const shownRed = rawRed * scale;
-    this.luminance.observe(shownLuminance, now);
-    this.red.observe(shownRed, now);
-
-    return { scale, rawLuminance, rawRed, shownLuminance, shownRed };
+    return { scale, raw, shown };
   }
 }
 
@@ -199,31 +278,43 @@ class FlashGuard {
  * app with ?flashlog to turn it on. */
 class FlashMeter {
   constructor() {
-    this.luminance = new TransitionCounter(FlashGuard.LUMINANCE_THRESHOLD);
-    this.red = new TransitionCounter(FlashGuard.RED_THRESHOLD);
-    this.rawLuminance = new TransitionCounter(FlashGuard.LUMINANCE_THRESHOLD);
-    this.rawRed = new TransitionCounter(FlashGuard.RED_THRESHOLD);
+    this.layout = '';
     this.worst = { flashes: 0, redFlashes: 0, rawFlashes: 0, rawRedFlashes: 0 };
     this.frames = 0;
     this.veiledFrames = 0;
+    // The last second only, for the log: frame rate and the guard's own cost.
+    this.second = { frames: 0, veiledFrames: 0, guardMs: 0 };
   }
 
   // Raw values come from the guard: what the modes asked for, before the veil.
-  observe(shownPixels, guardResult, now) {
+  observe(shownPixels, cols, rows, guardResult, now, guardMs) {
+    const layout = `${cols}x${rows}`;
+    if (layout !== this.layout) {
+      this.layout = layout;
+      this.regions = FlashGuard.regionsFor(cols, rows);
+      this.shown = new RegionCounters(this.regions.length);
+      this.raw = new RegionCounters(this.regions.length);
+    }
     this.frames++;
-    if (guardResult.scale < 1) this.veiledFrames++;
-    this.luminance.observe(FlashGuard.luminanceOf(shownPixels), now);
-    this.red.observe(FlashGuard.redOf(shownPixels), now);
-    this.rawLuminance.observe(guardResult.rawLuminance, now);
-    this.rawRed.observe(guardResult.rawRed, now);
+    this.second.frames++;
+    this.second.guardMs += guardMs;
+    if (guardResult.scale < 1) {
+      this.veiledFrames++;
+      this.second.veiledFrames++;
+    }
 
-    // A flash is two transitions. Half a flash still counts against the
-    // ceiling, so round up: five transitions in a window reads as three.
-    const flashes = (counter) => Math.ceil(counter.count(now) / 2);
-    this.worst.flashes = Math.max(this.worst.flashes, flashes(this.luminance));
-    this.worst.redFlashes = Math.max(this.worst.redFlashes, flashes(this.red));
-    this.worst.rawFlashes = Math.max(this.worst.rawFlashes, flashes(this.rawLuminance));
-    this.worst.rawRedFlashes = Math.max(this.worst.rawRedFlashes, flashes(this.rawRed));
+    this.regions.forEach((region, i) => {
+      this.shown.luminance[i].observe(FlashGuard.luminanceOf(shownPixels, cols, region), now);
+      this.shown.red[i].observe(FlashGuard.redOf(shownPixels, cols, region), now);
+      this.raw.luminance[i].observe(guardResult.raw[i].luminance, now);
+      this.raw.red[i].observe(guardResult.raw[i].red, now);
+    });
+
+    const w = this.worst;
+    w.flashes = Math.max(w.flashes, this.shown.worst(this.shown.luminance, now));
+    w.redFlashes = Math.max(w.redFlashes, this.shown.worst(this.shown.red, now));
+    w.rawFlashes = Math.max(w.rawFlashes, this.raw.worst(this.raw.luminance, now));
+    w.rawRedFlashes = Math.max(w.rawRedFlashes, this.raw.worst(this.raw.red, now));
   }
 }
 
@@ -705,9 +796,9 @@ class DJVisualizer {
   // See app/flashGuard.js for the rule. PHI-265.
   limitFlashes(p) {
     const now = performance.now();
-    let pixels;
+    let frame;
     try {
-      pixels = this.sampleFrame(p);
+      frame = this.sampleFrame(p);
     } catch (error) {
       // An unreadable frame cannot be measured, so the ceiling cannot be
       // proven. Fall to the calm path, which does not flash, rather than let
@@ -718,7 +809,7 @@ class DJVisualizer {
       }
       return;
     }
-    const result = this.flashGuard.process(pixels, now);
+    const result = this.flashGuard.process(frame.pixels, frame.cols, frame.rows, now);
 
     if (result.scale < 1) {
       p.push();
@@ -729,17 +820,39 @@ class DJVisualizer {
     }
 
     // Measurement reads the canvas again, after the veil, so it checks what
-    // was shown rather than trusting the guard's arithmetic.
+    // was shown rather than trusting the guard's arithmetic. The second read
+    // is measurement cost only; production pays for one.
     if (this.flashMeter) {
-      this.flashMeter.observe(this.sampleFrame(p), result, now);
-      if (now - (this.flashLogAt || 0) >= 1000) {
-        this.flashLogAt = now;
-        console.log('[flash]', JSON.stringify(this.flashMeter.worst), {
-          veiledFrames: this.flashMeter.veiledFrames,
-          frames: this.flashMeter.frames
-        });
-      }
+      const guardMs = performance.now() - now;
+      const shown = this.sampleFrame(p);
+      this.flashMeter.observe(shown.pixels, shown.cols, shown.rows, result, now, guardMs);
+      this.logFlashes(now);
     }
+  }
+
+  // One line a second while ?flashlog is on: the worst one-second window seen
+  // so far in this mode, and what the guard cost. Switching mode starts a new
+  // count, so a set walked through every mode reads as one line per mode.
+  logFlashes(now) {
+    const meter = this.flashMeter;
+    if (this.flashLogMode !== this.currentMode) {
+      this.flashLogMode = this.currentMode;
+      this.flashMeter = new FlashMeter();
+      this.flashLogAt = now;
+      return;
+    }
+    if (now - (this.flashLogAt || 0) < 1000) return;
+    const seconds = (now - this.flashLogAt) / 1000;
+    this.flashLogAt = now;
+    const second = meter.second;
+    console.log(
+      `[flash] ${this.currentMode}: ${JSON.stringify(meter.worst)}, ` +
+        `${Math.round(second.frames / seconds)} FPS, ` +
+        `guard ${(second.guardMs / Math.max(1, second.frames)).toFixed(2)} ms/frame, ` +
+        `veiled ${second.veiledFrames}/${second.frames}`
+    );
+    // Rate and cost are per second; the worst window is kept for the mode.
+    meter.second = { frames: 0, veiledFrames: 0, guardMs: 0 };
   }
 
   // A small grid of single pixels from the composited stage: black ground,
@@ -773,7 +886,7 @@ class DJVisualizer {
       ctx.drawImage(this.collageCanvas, 0, 0, cols, rows);
     }
     ctx.drawImage(canvas, 0, 0, cols, rows);
-    return ctx.getImageData(0, 0, cols, rows).data;
+    return { pixels: ctx.getImageData(0, 0, cols, rows).data, cols, rows };
   }
 
   updateFrequencyDisplay() {
