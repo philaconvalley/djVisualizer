@@ -10,6 +10,7 @@
     "fixtures": "node test/fixtures/make-audio.mjs",
     "verify": "node test/fixtures/make-audio.mjs && node test/verify-audio.mjs",
     "verify:sandbox": "node test/verify-sandbox.mjs",
+    "verify:flash": "node test/fixtures/make-audio.mjs && node test/verify-flash.mjs",
     "smoke": "node test/smoke-deploy.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -92,6 +92,8 @@ async function withAudio(wav, run, beforeStart, { query = '' } = {}) {
   // `djApp` is a top-level `let` in a classic script, so it lives in the global
   // lexical scope rather than on `window` — reachable bare, not as a property.
   await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
+  // The photosensitivity warning comes first and blocks the page until answered.
+  await page.click('#flashWarningContinue');
   if (beforeStart) await beforeStart(page);
   await page.click('#start');
   // Let the analyser fill and the band smoothing settle.

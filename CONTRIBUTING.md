@@ -189,8 +189,14 @@ thing to look at, because "it looked fine" is not a check.
 8. **Go fullscreen and check the projector, not the laptop.** Confirm the console
    rail is legible from the back of the room and that nothing important sits
    underneath it.
-9. **Toggle Reduce flash.** Confirm the beat accents visibly damp. This is a
-   safety control, not a preference — see below.
+9. **Check the flash ceiling.** Load the app with `?flashlog`, play the loudest
+   track of the set, and walk through every mode. The console prints one
+   `[flash]` line a second per mode: `flashes` and `redFlashes` must stay at 3
+   or less. The same line gives FPS and the guard's cost in ms per frame; FPS
+   under `?flashlog` reads a little low, because the meter reads every frame a
+   second time. Then toggle **Reduce motion** and confirm
+   the beat strikes stop and the stage only glides. This is a safety control, not
+   a preference — see below.
 
 This checklist is eyeball-the-readout by design — fast, no setup. For a
 number worth citing (a p50/p05 FPS figure in a ticket, a before/after
@@ -235,9 +241,12 @@ loud room — a meter that invents a reading is worse than one that reads zero.
 This app renders full-field luminance changes at beat rate and is projected to
 audiences who did not opt in and cannot easily look away. WCAG 2.3.1 governs.
 
-- Drive flashes and pulses from `this.beat`, which is already struck at the
-  current flash allowance. Do not introduce a second luminance channel that
-  bypasses it — the gating is at the source precisely so it cannot be forgotten.
+- The flash ceiling is the last stage of `draw()`: `limitFlashes()` reads the
+  frame and veils it. Keep it last. Anything drawn after it is not limited.
+- Drive flashes and pulses from `this.beat`, which is struck at the current flash
+  allowance and not at all under Reduce motion. The ceiling catches a source that
+  bypasses it, but the beat is still where accents belong.
+- Run `npm run verify:flash` after any change to a mode.
 - `prefers-reduced-motion` means reduced *flashing*, never a still visualizer —
   a visualizer with no motion has no function.
 - `prefers-reduced-transparency` and `prefers-contrast` are honoured in CSS.

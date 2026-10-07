@@ -88,7 +88,8 @@ export default [
         djApp: 'readonly',
         hw: 'readonly',
         AudioProcessor: 'readonly',
-        DJVisualizer: 'readonly'
+        DJVisualizer: 'readonly',
+        FlashMeter: 'readonly'
       }
     }
   },

@@ -68,6 +68,10 @@ class DJVisualizerApp {
 
     // Set up keyboard shortcuts for live performance
     document.addEventListener('keydown', (e) => {
+      // The flash warning takes no shortcuts. Space on its focused button
+      // must answer it, not also start the audio behind it.
+      if (this.flashWarning?.open) return;
+
       // Only text entry should swallow shortcuts. A focused range slider must not
       // kill Space and F, or the transport dies as soon as you touch a band.
       if (e.target.matches('input[type="file"], input[type="text"], textarea')) return;
@@ -539,20 +543,72 @@ class DJVisualizerApp {
       if (e.target.id === 'helpOverlay') this.hideHelp();
     });
 
-    // Flash reduction: a safety control, defaulted from the OS preference but
-    // overridable in both directions.
-    const flash = document.getElementById('reduceFlash');
-    if (flash) {
+    // Reduce motion: a safety control, defaulted from the OS preference but
+    // overridable in both directions. It selects the visualizer's low-motion
+    // path. The flash ceiling itself is not here: it always runs, in the
+    // render path, and nothing in the UI can raise it. PHI-265.
+    this.reduceMotion = document.getElementById('reduceMotion');
+    if (this.reduceMotion) {
       const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-      const apply = () => this.visualizer.setFlashIntensity(flash.checked ? 0.15 : 1);
-      flash.checked = query.matches;
-      apply();
-      flash.addEventListener('change', apply);
+      this.reduceMotion.checked = query.matches;
+      this.applyReducedMotion();
+      this.reduceMotion.addEventListener('change', () => this.applyReducedMotion());
       query.addEventListener?.('change', (e) => {
-        flash.checked = e.matches;
-        apply();
+        this.reduceMotion.checked = e.matches;
+        this.applyReducedMotion();
       });
     }
+
+    this.setupFlashWarning();
+  }
+
+  applyReducedMotion() {
+    this.visualizer.setReducedMotion(this.reduceMotion.checked);
+  }
+
+  // The warning comes before any visuals, on every device: a phone opened at
+  // the event is the viewer we know least about. A modal dialog makes the
+  // page behind it inert, so nothing can start until it is answered. Once
+  // answered it stays answered for the browser session, so an operator
+  // reloading mid-set does not put it back on the projector. Spec §3.2.
+  setupFlashWarning() {
+    const dialog = document.getElementById('flashWarning');
+    if (!dialog || typeof dialog.showModal !== 'function') return;
+    this.flashWarning = dialog;
+
+    let answered = false;
+    try {
+      answered = sessionStorage.getItem('flashWarningAnswered') === 'true';
+    } catch (_error) {
+      // Storage can be blocked. Showing the warning again is the safe side.
+    }
+    if (answered) return;
+
+    let answeredNow = false;
+    const answer = (reduce) => {
+      answeredNow = true;
+      if (reduce && this.reduceMotion) {
+        this.reduceMotion.checked = true;
+        this.applyReducedMotion();
+      }
+      try {
+        sessionStorage.setItem('flashWarningAnswered', 'true');
+      } catch (_error) {
+        // Not remembered; it shows again on reload, which is acceptable.
+      }
+      dialog.close();
+    };
+    document.getElementById('flashWarningContinue').addEventListener('click', () => answer(false));
+    document.getElementById('flashWarningReduce').addEventListener('click', () => answer(true));
+    // Esc would dismiss it without an answer. It has to be answered.
+    // Blocking `cancel` is not enough: Chrome ignores that block until the
+    // page has had a click, so a closed-but-unanswered dialog reopens.
+    dialog.addEventListener('cancel', (e) => e.preventDefault());
+    dialog.addEventListener('close', () => {
+      if (!answeredNow) dialog.showModal();
+    });
+
+    dialog.showModal();
   }
 
   setTransport(label, running) {
