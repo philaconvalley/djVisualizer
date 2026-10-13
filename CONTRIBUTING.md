@@ -137,7 +137,8 @@ catch, and it would have been embarrassing to build it in.
 
 **What it does not cover.** Live device enumeration, USB line level and gain
 staging, sustained thermal behaviour, and the projector. Those still need the
-controller in the room; see the checklist below.
+controller in the room; see the checklist below. For thermal behaviour, see
+the soak test after the checklist.
 
 Device *classification* — which labels count as DJ hardware, and how they rank
 against microphones and loopbacks — is covered, because it is pure string logic
@@ -212,6 +213,38 @@ Mandala's 15.1 FPS minimum was one frame at the same rate as Particles. The rate
 is what showed Polygon Collage at 14.7 per 1000 against 1.4–3.1 for the light
 modes. To find what a slow frame was doing, run `node test/stall-trace.mjs`; see
 its header.
+
+## Soak test: an hour, unattended (PHI-178)
+
+The checklist above takes twenty minutes. A set takes 60 to 120. Three
+failures only show across that length: a thermal slide in FPS, memory that keeps
+growing, and a beat detector that drifts. The soak test runs the app for an
+hour and compares the first ten minutes with the last ten.
+
+```bash
+LIVE=1 REAL_FS=1 node test/soak.mjs     # 60 min, DDJ-REV1, fullscreen
+```
+
+Start Serato and the music first. Then start the soak and leave the machine
+alone. The window must stay in front, so turn off notifications. The driver
+rotates the modes once a minute. It writes its record to `test/output/` every
+minute, and prints the report at the end. Ctrl-C ends the run early and still
+prints the report. `test/soak.mjs`'s header lists the options.
+
+Run it on mains power, and on battery too if the event's power is uncertain.
+**Check Low Power Mode before a battery run.** On 10/13 it halved Particles and
+Rings from 59 to 29 FPS, and macOS can turn it on by itself when the battery
+is low. The driver records it every minute. The report says when it was on, so
+that a Low Power Mode drop does not read as a thermal one.
+
+The driver cannot hear the fan or feel the case. Record those by hand in a copy
+of `docs/hardware-checks/SOAK-TEMPLATE.md`; a thermal result means nothing
+without them.
+
+To check the analysis itself, run `npm run verify:soak`. It feeds synthetic runs
+with known answers (a thermal slide, a leak, BPM drift, a USB dropout) and
+asserts each verdict, in under a second. Run it after you change
+`test/soak-analysis.mjs`.
 
 ## Adding a visualization mode
 
