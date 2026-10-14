@@ -137,6 +137,10 @@ function windowSummary(buckets) {
 function series(rows, windowMs, durationMs, pick, reduce = median) {
   const out = [];
   for (let from = 0; from < durationMs; from += windowMs) {
+    // A run that ends just past a window edge leaves a stub window of a few
+    // samples. On 10/14 a 0.1 s stub caught the heap mid-sawtooth and failed
+    // the leak check. Keep a trailing window only if it is half full.
+    if (from > 0 && durationMs - from < windowMs / 2) break;
     const vals = rows.filter((r) => r.at >= from && r.at < from + windowMs).map(pick);
     out.push({ fromMin: from / 60000, median: reduce(vals) });
   }

@@ -11,6 +11,7 @@
  *   short        20 minutes: duration fails
  *   dropout      two minutes of silence: the report names the stretch
  *   switch       a mode switch flushes a bucket with no band samples: not silence
+ *   stub         a run that ends 0.1 s past a window edge: the stub is not judged
  *
  *   node test/verify-soak.mjs
  */
@@ -159,6 +160,21 @@ function check(name, cond, detail = '') {
   const b = run.buckets[6];
   run.buckets.splice(7, 0, { ...b, at: b.end, end: b.end + 5, bass: null, mid: null, high: null });
   check('switch: an empty bucket is not silence', analyze(run).silence.length === 0);
+}
+
+{
+  // The 10/14 leak test ended 0.1 s past the 5-minute edge, and its two-sample
+  // stub window, caught mid-sawtooth, failed the heap check.
+  const run = makeRun();
+  const b = run.buckets.at(-1);
+  run.buckets.push({ ...b, at: b.end, end: b.end + 100, heapUsed: 60 * 1048576 });
+  const r = analyze(run);
+  check(
+    'stub: trailing stub window is dropped',
+    r.series.heap.length === 6,
+    `${r.series.heap.length} windows`
+  );
+  check('stub: heap still passes', r.verdicts.heap.pass === true);
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

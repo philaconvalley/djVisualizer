@@ -130,6 +130,7 @@
     skippedSettle: 0
   });
   let bucket = newBucket();
+  let lastPersist = 0;
   let lastSwitchAt = -Infinity;
 
   function flush() {
@@ -160,7 +161,14 @@
       audioRunning: !!ap()?.isRunning
     });
     bucket = newBucket();
-    persist();
+    // A mode switch also flushes, and a fast rotation switches every half
+    // second. Writing the whole record each time grew the browser's storage
+    // process by 11 MB in 5 minutes (10/14). Save at most once per bucket
+    // length; beforeunload still saves the rest.
+    if (Date.now() - lastPersist >= BUCKET_MS) {
+      lastPersist = Date.now();
+      persist();
+    }
   }
 
   // ---- samplers ---------------------------------------------------------
