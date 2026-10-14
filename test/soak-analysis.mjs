@@ -246,7 +246,17 @@ export function analyze(state, { windowMin = 10 } = {}) {
   const heap = series(buckets, windowMs, durationMs, (b) => b.heapUsed, floor);
   const dom = series(buckets, windowMs, durationMs, (b) => b.domNodes);
   const host = state.host || [];
-  const rss = series(host, windowMs, durationMs, (h) => h.rssBytes ?? null);
+  // Footprint when the run has it (it counts compressed pages); RSS for runs
+  // recorded before 10/14. See processMemory() in test/soak.mjs.
+  const hasFootprint = host.some((h) => h.footprintBytes != null);
+  const rss = series(host, windowMs, durationMs, (h) =>
+    hasFootprint ? (h.footprintBytes ?? null) : (h.rssBytes ?? null)
+  );
+  if (host.length && !hasFootprint)
+    notes.push(
+      'Browser memory is resident memory (RSS), which misses pages macOS compresses. ' +
+        'A sudden drop in every process at once is compression, not the app freeing memory.'
+    );
   const cdpHeap = series(host, windowMs, durationMs, (h) => h.jsHeapUsed ?? null);
 
   // BPM.
@@ -274,6 +284,7 @@ export function analyze(state, { windowMin = 10 } = {}) {
     first: w1,
     last: w2,
     series: { heap, dom, rss, cdpHeap },
+    memoryMeasure: hasFootprint ? 'footprint' : 'rss',
     host: {
       first: host[0] ?? null,
       last: host.at(-1) ?? null
@@ -309,7 +320,8 @@ export function toMarkdown(r) {
     `| ${name} plateaus | ${yes(m.pass)} | ${m.pass == null ? m.reason : `${fmt(m.baseline)} -> ${fmt(m.last)} (${pc(m.growth)})${m.monotonic && !m.pass ? ', rose every window' : ''}`} |`;
   L.push(memRow('JS heap floor (MB)', v.heap, mb));
   L.push(memRow('DOM nodes', v.domNodes, (x) => x));
-  L.push(memRow('Browser memory (MB)', v.processMemory, mb));
+  const memName = r.memoryMeasure === 'footprint' ? 'Browser footprint (MB)' : 'Browser RSS (MB)';
+  L.push(memRow(memName, v.processMemory, mb));
   L.push(
     `| BPM no worse | ${yes(v.bpm.pass)} | jitter ${v.bpm.first.jitter ?? '—'} -> ${v.bpm.last.jitter ?? '—'} BPM, no-BPM ${v.bpm.first.zeroFraction ?? '—'} -> ${v.bpm.last.zeroFraction ?? '—'} |`
   );
@@ -328,7 +340,7 @@ export function toMarkdown(r) {
   L.push('');
   L.push('Memory per window:');
   L.push('');
-  L.push('| From (min) | JS heap floor MB | DOM nodes (median) | Browser memory MB (median) |');
+  L.push(`| From (min) | JS heap floor MB | DOM nodes (median) | ${memName} (median) |`);
   L.push('|---|---|---|---|');
   r.series.heap.forEach((h, i) => {
     L.push(

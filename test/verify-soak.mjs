@@ -61,7 +61,13 @@ function makeRun({
   }
   const host = [];
   for (let at = 0; at < minutes * 60000; at += 60000)
-    host.push({ at, rssBytes: 900 * 1048576, power: 'AC Power', battery: '100%; charged' });
+    host.push({
+      at,
+      rssBytes: 900 * 1048576,
+      footprintBytes: 1200 * 1048576,
+      power: 'AC Power',
+      battery: '100%; charged'
+    });
   return {
     startedAt: '2026-10-13T00:00:00.000Z',
     options: { rotateMs: 60000, modes: MODES },
@@ -175,6 +181,26 @@ function check(name, cond, detail = '') {
     `${r.series.heap.length} windows`
   );
   check('stub: heap still passes', r.verdicts.heap.pass === true);
+}
+
+{
+  // 10/13: macOS compressed memory at minute 52 and RSS fell in every process,
+  // hiding a climb. Footprint counts compressed pages, so a climbing footprint
+  // must fail even when RSS falls.
+  const run = makeRun();
+  run.host.forEach((h, i) => {
+    h.footprintBytes = (1200 + 10 * i) * 1048576; // +600 MB over the hour
+    h.rssBytes = (i < 50 ? 900 : 600) * 1048576;
+  });
+  const r = analyze(run);
+  check('compression: judged on footprint', r.memoryMeasure === 'footprint');
+  check('compression: climbing footprint fails', r.verdicts.processMemory.pass === false);
+  delete run.host[0].footprintBytes;
+  run.host.forEach((h) => delete h.footprintBytes);
+  check(
+    'compression: old runs fall back to RSS, with a note',
+    analyze(run).notes.some((n) => n.includes('RSS'))
+  );
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

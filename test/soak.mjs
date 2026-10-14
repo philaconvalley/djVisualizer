@@ -15,8 +15,9 @@
  *   - power source and battery level (`pmset -g batt`), and whether Low Power
  *     Mode is on (`pmset -g`). Low Power Mode caps the frame rate.
  *   - the thermal state macOS reports (`pmset -g therm`)
- *   - the resident memory of every Chromium process, GPU process included.
- *     The JS heap misses textures and canvases; this does not.
+ *   - the memory footprint of every Chromium process, GPU process included,
+ *     as Activity Monitor shows it. The JS heap misses textures and canvases;
+ *     this does not.
  *   - the precise JS heap from the DevTools protocol (Performance.getMetrics)
  *
  * The record goes to test/output/soak-<start>.json every minute, so a crash
@@ -129,31 +130,63 @@ async function thermal() {
   return values.length ? values.join('; ') : 'none recorded';
 }
 
-/** Resident memory of every process the browser reports, GPU included. */
+const UNIT = { B: 1, K: 1024, M: 1048576, G: 1073741824 };
+
+/**
+ * Memory of every process the browser reports, GPU included, two ways.
+ *
+ * Footprint is what Activity Monitor calls Memory: it counts pages macOS has
+ * compressed. Resident memory (RSS) does not. On the 10/13 hour run, macOS
+ * compressed memory system-wide at minute 52, and every browser process's RSS
+ * fell at once, the audio and network processes too. RSS read that as the app
+ * freeing 320 MB, and hid a renderer that had climbed for 30 minutes before
+ * it. The analysis judges footprint; RSS stays in the record for comparison.
+ */
 async function processMemory(browserCdp) {
   let pids;
   try {
     const { processInfo } = await browserCdp.send('SystemInfo.getProcessInfo');
     pids = processInfo.map((p) => ({ pid: p.id, type: p.type }));
   } catch (_) {
-    return { rssBytes: null };
+    return { rssBytes: null, footprintBytes: null };
   }
-  const out = await sh('ps', ['-o', 'pid=,rss=', '-p', pids.map((p) => p.pid).join(',')]);
-  const rss = new Map(
-    out
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((l) => l.trim().split(/\s+/).map(Number))
+  const table = (out, parse) =>
+    new Map(
+      out
+        .trim()
+        .split('\n')
+        .map((l) => l.trim().split(/\s+/))
+        .filter((c) => c.length >= 2)
+        .map(([pid, v]) => [Number(pid), parse(v)])
+    );
+  const rss = table(
+    await sh('ps', ['-o', 'pid=,rss=', '-p', pids.map((p) => p.pid).join(',')]),
+    (v) => Number(v) * 1024
   );
-  const byType = {};
-  let total = 0;
-  for (const { pid, type } of pids) {
-    const bytes = (rss.get(pid) || 0) * 1024;
-    byType[type] = (byType[type] || 0) + bytes;
-    total += bytes;
-  }
-  return { rssBytes: total, rssByType: byType };
+  // top lists every process; one sample a minute is cheap. Values read like
+  // "531M+" or "1.2G".
+  const footprint = table(await sh('top', ['-l', '1', '-stats', 'pid,mem']), (v) => {
+    const m = v.match(/^([\d.]+)([BKMG])/);
+    return m ? Number(m[1]) * UNIT[m[2]] : null;
+  });
+  const sum = (map) => {
+    const byType = {};
+    let total = 0;
+    for (const { pid, type } of pids) {
+      const bytes = map.get(pid) || 0;
+      byType[type] = (byType[type] || 0) + bytes;
+      total += bytes;
+    }
+    return { total, byType };
+  };
+  const r = sum(rss);
+  const f = sum(footprint);
+  return {
+    rssBytes: r.total,
+    rssByType: r.byType,
+    footprintBytes: f.total || null,
+    footprintByType: f.byType
+  };
 }
 
 async function pageHeap(cdp) {
@@ -297,7 +330,7 @@ try {
     );
     const status = await page.evaluate(() => soak.status());
     console.log(
-      `${status}, browser ${row.rssBytes ? (row.rssBytes / 1048576).toFixed(0) : '—'} MB, ${row.power ?? ''} ${row.battery ?? ''}${row.lowPowerMode ? ', LOW POWER MODE' : ''}`
+      `${status}, browser ${row.footprintBytes ? (row.footprintBytes / 1048576).toFixed(0) : '—'} MB, ${row.power ?? ''} ${row.battery ?? ''}${row.lowPowerMode ? ', LOW POWER MODE' : ''}`
     );
     await page.waitForTimeout(Math.min(HOST_EVERY_MS, Math.max(0, endAt - Date.now())));
   }
