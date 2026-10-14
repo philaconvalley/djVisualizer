@@ -155,6 +155,12 @@ for a controller on the bus, is still a hardware question.
 Twenty minutes with the controller, in this order. Every step has a specific
 thing to look at, because "it looked fine" is not a check.
 
+**Before step 1: plug the laptop in, and turn Low Power Mode off.** Low Power
+Mode caps the frame rate. On 10/13 it halved Particles and Rings from 59 to
+29 FPS, and macOS turned it on by itself when the battery was low.
+`pmset -g | grep lowpowermode` must read `0`. Check it again at the show if
+the laptop runs on battery (PHI-178).
+
 1. **Connect the controller by USB before opening the browser.** Chrome
    enumerates devices at page load; a device plugged in afterwards may not be
    listed until you reload.
