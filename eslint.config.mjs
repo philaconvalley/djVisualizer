@@ -87,6 +87,7 @@ export default [
         ...globals.browser,
         djApp: 'readonly',
         hw: 'readonly',
+        soak: 'readonly',
         AudioProcessor: 'readonly',
         DJVisualizer: 'readonly',
         FlashMeter: 'readonly'
@@ -96,7 +97,7 @@ export default [
 
   // Pasted into the console of the running app. Browser only.
   {
-    files: ['test/hardware-probe.js'],
+    files: ['test/hardware-probe.js', 'test/soak-probe.js'],
     languageOptions: {
       sourceType: 'script',
       globals: { ...globals.browser, djApp: 'readonly' }

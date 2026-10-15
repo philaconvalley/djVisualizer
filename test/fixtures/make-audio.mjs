@@ -167,6 +167,16 @@ function concat(...parts) {
   return out;
 }
 
+// Soak fixture for test/soak.mjs (PHI-178). The ticket asks whether the beat
+// detector holds up "against changing material" for an hour, and one tempo on
+// a loop never changes. Six tempos, 90 s each, hard cuts like a quick mix: it
+// loops every 9 minutes, so each 10-minute window hears all six. 174 and 85
+// are the octave cases from the BPM fixtures above.
+writeWav(
+  'soak-medley.wav',
+  concat(...[124, 128, 120, 174, 85, 126].map((bpm) => broadbandMix(bpm, 90)))
+);
+
 // A stream that opens and never carries audio.
 writeWav('silence.wav', silence(12));
 // Dead at load-in, then the mixer output gets fixed. The message must clear.

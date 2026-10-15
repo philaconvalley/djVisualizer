@@ -11,6 +11,8 @@
     "verify": "node test/fixtures/make-audio.mjs && node test/verify-audio.mjs",
     "verify:sandbox": "node test/verify-sandbox.mjs",
     "verify:flash": "node test/fixtures/make-audio.mjs && node test/verify-flash.mjs",
+    "verify:soak": "node test/verify-soak.mjs",
+    "soak": "node test/soak.mjs",
     "smoke": "node test/smoke-deploy.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
