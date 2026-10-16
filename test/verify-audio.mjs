@@ -225,10 +225,25 @@ async function modeTest() {
 
     check('ten modes are offered', modes.length === 10, `${modes.length} found`);
 
+    // A rect with a corner radius is tessellated from scratch on every call in
+    // p5 1.9 WEBGL. Spectrum drew 264 a frame and ran at 27 FPS on an M1 Max.
+    // SwiftShader cannot show that as a frame rate, so count the calls. PHI-266.
+    await page.evaluate(() => {
+      const p = djApp.visualizer.p5Instance;
+      const rect = p.rect.bind(p);
+      window.__roundedRects = 0;
+      p.rect = (...args) => {
+        if (args.length > 4 && args[4] > 0) window.__roundedRects++;
+        return rect(...args);
+      };
+    });
+
     for (const mode of modes) {
       const before = errors.length;
       await page.selectOption('#visualMode', mode.value);
+      await page.evaluate(() => (window.__roundedRects = 0));
       await page.waitForTimeout(1200);
+      const rounded = await page.evaluate(() => window.__roundedRects);
 
       // A mode that throws every frame still "renders" a black canvas, so the
       // pixel check and the error check both have to pass.
@@ -275,6 +290,14 @@ async function modeTest() {
         painted.ok ? `${(painted.ratio * 100).toFixed(2)}% of pixels lit` : painted.reason
       );
       check(`${mode.label} runs clean`, fresh.length === 0, fresh[0] || 'no errors');
+      // Custom Upload's drop target is one plate a frame, which costs nothing.
+      if (mode.value !== 'custom') {
+        check(
+          `${mode.label} draws no tessellated rounded rects`,
+          rounded === 0,
+          `${rounded} in 1.2 s`
+        );
+      }
     }
 
     const fps = await page.textContent('#fpsCounter');

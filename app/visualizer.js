@@ -697,6 +697,36 @@ class DJVisualizer {
     }
   }
 
+  /* A rounded rect that p5 can draw from its geometry cache.
+   *
+   * p5 1.9's WEBGL renderer tessellates a rect with a corner radius from
+   * scratch on every call. Spectrum Bars drew 264 of them a frame, which took
+   * 29 ms and held the mode at 27 FPS on an M1 Max. Plain rects and fixed-angle
+   * arcs are built once and reused, so the same shape is assembled from three
+   * rects and four quarter discs. The parts meet edge to edge and never overlap,
+   * because under additive blending an overlap would draw a bright seam. PHI-266.
+   */
+  roundedRect(p, x, y, w, h, radius) {
+    const r = Math.min(radius, w / 2, h / 2);
+    if (r <= 0) {
+      p.rect(x, y, w, h);
+      return;
+    }
+    const d = r * 2;
+    const right = x + w - r;
+    const bottom = y + h - r;
+
+    if (w > d) p.rect(x + r, y, w - d, h);
+    if (h > d) {
+      p.rect(x, y + r, r, h - d);
+      p.rect(right, y + r, r, h - d);
+    }
+    p.arc(x + r, y + r, d, d, Math.PI, Math.PI * 1.5, p.PIE);
+    p.arc(right, y + r, d, d, Math.PI * 1.5, Math.PI * 2, p.PIE);
+    p.arc(right, bottom, d, d, 0, Math.PI / 2, p.PIE);
+    p.arc(x + r, bottom, d, d, Math.PI / 2, Math.PI, p.PIE);
+  }
+
   emissiveDot(p, rgb, alpha, diameter, x = 0, y = 0) {
     p.noStroke();
     for (const [ws, as] of DJVisualizer.GLOW) {
@@ -972,7 +1002,7 @@ class DJVisualizer {
       p.noStroke();
       for (const [ws, as] of DJVisualizer.GLOW) {
         p.fill(rgb[0], rgb[1], rgb[2], (70 + lit * 170) * as);
-        p.rect((-barW * ws) / 2, -barH / 2, barW * ws, barH, barW / 2);
+        this.roundedRect(p, (-barW * ws) / 2, -barH / 2, barW * ws, barH, barW / 2);
       }
       p.pop();
 
