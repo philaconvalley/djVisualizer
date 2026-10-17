@@ -60,25 +60,36 @@ class KickEnvelope extends AudioWorkletProcessor {
     this.lp = 0;
     this.blocks = 0;
     this.peak = 0;
-    // One-pole lowpass near 180 Hz. The kick is what beat detection keys off;
-    // everything above this is someone else's job.
+    // One-pole lowpass near 180 Hz: the kick.
     this.a = 1 - Math.exp(-2 * Math.PI * 180 / sampleRate);
+    // Everything above ~2 kHz: the snare's crack and the hats. On a backbeat
+    // the kick only plays beats 1 and 3, so a kick-only tempo reads half the
+    // song. The snare and hats fill in the beats the kick leaves out. PHI-175.
+    this.lpHi = 0;
+    this.peakHi = 0;
+    this.aHi = 1 - Math.exp(-2 * Math.PI * 2000 / sampleRate);
   }
   process(inputs) {
     const channel = inputs[0] && inputs[0][0];
     if (!channel) return true;
     let sum = 0;
+    let sumHi = 0;
     for (let i = 0; i < channel.length; i++) {
       this.lp += (channel[i] - this.lp) * this.a;
       sum += this.lp * this.lp;
+      this.lpHi += (channel[i] - this.lpHi) * this.aHi;
+      const hi = channel[i] - this.lpHi;
+      sumHi += hi * hi;
     }
     // Peak-hold across the reporting interval so a transient landing mid-block
     // is never averaged away.
     this.peak = Math.max(this.peak, Math.sqrt(sum / channel.length));
+    this.peakHi = Math.max(this.peakHi, Math.sqrt(sumHi / channel.length));
     if (++this.blocks >= 4) {           // ~86 Hz at 44.1 kHz
-      this.port.postMessage({ t: currentTime, v: this.peak });
+      this.port.postMessage({ t: currentTime, v: this.peak, h: this.peakHi });
       this.blocks = 0;
       this.peak = 0;
+      this.peakHi = 0;
     }
     return true;
   }
@@ -122,11 +133,16 @@ class AudioProcessor {
     // ten beats, the mean converged onto the signal, and the ratio test below
     // stopped firing — the detector failed on exactly the machine that needed
     // it to work.
-    this.bassWindow = []; // { t, v } pairs, t in ms
-    this.bassWindowMs = 700; // long enough to span a bar's worth of kicks
-    this.beatRatio = 1.35; // how far above the running mean counts as a kick
-    this.beatFloor = 0.012; // below this the room is quiet, not grooving
-    this.lastBeatEnergy = 0;
+    this.meanWindowMs = 700; // long enough to span a bar's worth of kicks
+    this.beatRatio = 1.35; // how far above the running mean counts as a hit
+    // One onset detector per band, each against its own running mean: a hat
+    // pattern sits at a level the kick never reaches, and the other way round.
+    // `floor` is the level below which the band is quiet, not grooving. The
+    // high band's floor also keeps a noise bed out of the tempo vote.
+    this.bands = {
+      kick: { window: [], lastEnergy: 0, last: null, floor: 0.012 },
+      high: { window: [], lastEnergy: 0, last: null, floor: 0.01 }
+    };
     this.lastAnalysisAt = 0;
     // Analysis-tick errors already logged this audio session. See updateAudioData().
     this.reportedErrors = new Set();
@@ -742,12 +758,15 @@ class AudioProcessor {
     this.spectrum = [];
     this.bpm = 0;
     this.beatHistory = [];
-    this.bassWindow = [];
     this.envelopeQueue = [];
     this.onsets = [];
     this.periodMs = 0;
     this.lastBeatTime = 0;
-    this.lastBeatEnergy = 0;
+    for (const band of Object.values(this.bands)) {
+      band.window = [];
+      band.lastEnergy = 0;
+      band.last = null;
+    }
 
     if (DEBUG) console.log('Audio stopped and cleaned up');
   }
@@ -796,7 +815,7 @@ class AudioProcessor {
     const queued = this.envelopeQueue;
     this.envelopeQueue = [];
     for (const sample of queued) {
-      this.detectBeat(sample.t * 1000, sample.v);
+      this.detectBeat(sample.t * 1000, sample.v, sample.h);
     }
   }
 
@@ -815,58 +834,78 @@ class AudioProcessor {
    * and nothing musical is inferred from any one of them; the period is voted
    * on by the whole series. The kick wins that vote because it is louder, even
    * though the bassline produces more onsets. PHI-175.
+   *
+   * The kick alone is not enough either. On a backbeat (kick on 1 and 3, snare
+   * on 2 and 4, which is most hip-hop and pop) the kick's own period is two
+   * beats, and a kick-only vote read "Alright" at 118.8 BPM as 62 on the
+   * DDJ-REV1. So the high band records onsets into the same series. A kick and
+   * the snare after it are one beat apart, and that pair is the vote the kick
+   * could never cast by itself. `high` is 0 on the render-thread fallback,
+   * which stays kick-only.
    */
-  detectBeat(now = performance.now(), energy = this.bass) {
-    const currentTime = now;
+  detectBeat(now = performance.now(), energy = this.bass, high = 0) {
+    const kick = this.recordOnset('kick', now, energy);
+    const snare = this.recordOnset('high', now, high);
+
+    if (kick || snare) {
+      while (this.onsets.length && now - this.onsets[0].t > this.onsetWindowMs) {
+        this.onsets.shift();
+      }
+      const period = this.estimatePeriod();
+      if (period) {
+        this.periodMs = this.periodMs
+          ? this.periodMs * (1 - this.bpmSmoothingFactor) + period * this.bpmSmoothingFactor
+          : period;
+        this.bpm = Math.round(60000 / this.periodMs);
+      }
+    }
+
+    // Beat events stay on the kick and keep their own spacing rule, so the
+    // stage still accents what a listener hears as the hit. The interval
+    // guard lives here, where discarding a hit costs an accent, and no longer
+    // upstream of the tempo estimate, where it was costing the tempo.
+    if (!kick || now - this.lastBeatTime < this.minBeatInterval) return;
+    this.lastBeatTime = now;
+    if (this.onBeat) this.onBeat(now);
+  }
+
+  // True when this sample starts a new transient in the named band, which is
+  // then in this.onsets. A sample that only continues the last transient
+  // updates it in place and returns false.
+  recordOnset(name, now, energy) {
+    const band = this.bands[name];
 
     // The reference the peak is measured against, held to a fixed span of real
     // time. Keeping it short means a build-up raises the bar as it goes, so the
     // detector does not machine-gun through a drop the way a fixed threshold
-    // does — while still resolving individual kicks rather than averaging a bar.
-    this.bassWindow.push({ t: now, v: energy });
-    while (this.bassWindow.length && now - this.bassWindow[0].t > this.bassWindowMs) {
-      this.bassWindow.shift();
+    // does — while still resolving individual hits rather than averaging a bar.
+    band.window.push({ t: now, v: energy });
+    while (band.window.length && now - band.window[0].t > this.meanWindowMs) {
+      band.window.shift();
     }
-    const mean = this.bassWindow.reduce((a, s) => a + s.v, 0) / this.bassWindow.length;
+    const mean = band.window.reduce((a, s) => a + s.v, 0) / band.window.length;
 
-    const rising = energy > this.lastBeatEnergy;
-    this.lastBeatEnergy = energy;
+    const rising = energy > band.lastEnergy;
+    band.lastEnergy = energy;
 
-    // Nothing below the floor is a beat, however quiet the running mean gets;
+    // Nothing below the floor is a hit, however quiet the running mean gets;
     // otherwise silence with a little noise in it reads as a groove.
-    if (!rising || energy < this.beatFloor || energy < mean * this.beatRatio) return;
+    if (!rising || energy < band.floor || energy < mean * this.beatRatio) return false;
 
     // Same transient, still rising: keep the loudest sample of it rather than
     // recording two onsets a few milliseconds apart.
-    const previous = this.onsets[this.onsets.length - 1];
-    if (previous && currentTime - previous.t < this.onsetRefractoryMs) {
+    const previous = band.last;
+    if (previous && now - previous.t < this.onsetRefractoryMs) {
       if (energy > previous.v) {
-        previous.t = currentTime;
+        previous.t = now;
         previous.v = energy;
       }
-      return;
+      return false;
     }
 
-    this.onsets.push({ t: currentTime, v: energy });
-    while (this.onsets.length && currentTime - this.onsets[0].t > this.onsetWindowMs) {
-      this.onsets.shift();
-    }
-
-    const period = this.estimatePeriod();
-    if (period) {
-      this.periodMs = this.periodMs
-        ? this.periodMs * (1 - this.bpmSmoothingFactor) + period * this.bpmSmoothingFactor
-        : period;
-      this.bpm = Math.round(60000 / this.periodMs);
-    }
-
-    // Beat events stay on the onset stream and keep their own spacing rule, so
-    // the stage still accents what a listener hears as a hit. The interval
-    // guard lives here, where discarding a hit costs an accent, and no longer
-    // upstream of the tempo estimate, where it was costing the tempo.
-    if (currentTime - this.lastBeatTime < this.minBeatInterval) return;
-    this.lastBeatTime = currentTime;
-    if (this.onBeat) this.onBeat(currentTime);
+    band.last = { t: now, v: energy, band: name };
+    this.onsets.push(band.last);
+    return true;
   }
 
   /* Amplitude-weighted autocorrelation over the onset series.
@@ -882,23 +921,55 @@ class AudioProcessor {
    * produces quieter ones. Counting onsets picks the bassline. Weighting them
    * picks the kick.
    *
-   * No octave correction, and none is needed: a half-tempo candidate scores its
-   * own votes but misses every offbeat kick, and a double-tempo candidate finds
-   * nothing at the offbeat positions it predicts. The comment this replaces
+   * No octave correction: a half-tempo candidate scores its own votes but
+   * misses every offbeat hit, and a double-tempo candidate finds nothing at
+   * the offbeat positions it predicts. That holds only while every beat has an
+   * onset. With the kick alone, a backbeat leaves beats 2 and 4 empty and the
+   * half-tempo candidate wins honestly, which is why the high band votes too.
+   * A blanket fold (double anything under N BPM) was considered and rejected:
+   * it would misreport every genuinely slow track. The comment this replaces
    * asked for an interval histogram before anyone reintroduced doubling; this
-   * is that histogram, and it makes doubling unnecessary rather than safe.
+   * is that histogram.
    *
-   * The known bound: measured against a dotted-eighth bassline, this holds the
-   * true tempo while the bass stays at or under 80% of the kick's amplitude,
-   * and fails above 90%. The old estimator failed at 30%. At parity the two
-   * elements are indistinguishable by amplitude and nothing here can separate
-   * them — that would need a spectral or phase-based discriminator, which is a
-   * much larger change than this bug warrants.
+   * The known bound: measured against a dotted-eighth bassline, this held the
+   * true tempo with the bass at 80% of the kick and failed at 90% before the
+   * merge radius widened to ±2; it now holds at 90% (kick-125bpm-bassline-90).
+   * The old estimator failed at 30%. At parity the two elements are
+   * indistinguishable by amplitude and nothing here can separate them — that
+   * would need a spectral or phase-based discriminator.
    */
   estimatePeriod() {
-    const onsets = this.onsets;
     // Two onsets can only ever agree with themselves. Wait for a real sample.
-    if (onsets.length < 8) return 0;
+    if (this.onsets.length < 8) return 0;
+    // The pair loop below relies on time order. recordOnset() can move a kick
+    // a few ms later, past a high-band onset recorded behind it.
+    const onsets = [...this.onsets].sort((a, b) => a.t - b.t);
+
+    /* Each band's amplitudes, scaled so its loud hits count as 1.
+     *
+     * Both envelopes are RMS amplitude of the same signal, but a mix puts far
+     * less level above 2 kHz than in the kick: measured on the fixtures, a
+     * kick reads ~0.75 and a snare's crack ~0.12. Raw products would leave the
+     * snare almost no vote, which is the half-tempo bug again. So each band is
+     * scaled by its own 90th percentile, not its maximum: one crash cymbal
+     * would otherwise shrink every other hit for twelve seconds.
+     *
+     * The high band's scale never drops below 15% of the kick's. Without that
+     * floor, a band with nothing in it but the click at the start of each kick
+     * and bass note (~0.02) is scaled up to full weight, every bass note gets
+     * a full vote, and the 125 BPM bassline at 90% of the kick read 167. With
+     * it, a snare at 0.12 still counts in full and a click counts a quarter.
+     */
+    const scale = {};
+    for (const name of Object.keys(this.bands)) {
+      const levels = onsets
+        .filter((o) => o.band === name)
+        .map((o) => o.v)
+        .sort((a, b) => a - b);
+      scale[name] = levels.length ? levels[Math.floor((levels.length - 1) * 0.9)] : 1;
+    }
+    scale.high = Math.max(scale.high, 0.15 * scale.kick);
+    const weight = (o) => Math.min(1, o.v / scale[o.band]);
 
     const BUCKET = 10; // ms; finer than this is below the envelope's own rate
     const min = this.minBeatInterval;
@@ -911,7 +982,7 @@ class AudioProcessor {
         if (gap < min) continue;
         if (gap > max) break; // onsets are in time order, so the rest are too
         const bucket = Math.round(gap / BUCKET);
-        votes.set(bucket, (votes.get(bucket) || 0) + onsets[i].v * onsets[j].v);
+        votes.set(bucket, (votes.get(bucket) || 0) + weight(onsets[i]) * weight(onsets[j]));
       }
     }
     if (!votes.size) return 0;

@@ -131,6 +131,47 @@ function broadbandMix(bpm, seconds) {
   return out;
 }
 
+/* A drum kit on a one-bar pattern: kick, snare, and hats, each listed as beat
+ * positions in a 4-beat bar.
+ *
+ * Every fixture above puts a kick on every beat, and so a kick-only tempo
+ * estimate read them all correctly. A backbeat does not: the kick plays beats
+ * 1 and 3, the snare plays 2 and 4, and on the DDJ-REV1 "Alright" at 118.8 BPM
+ * read 62. The snare is a 190 Hz body under a noise crack, which is where the
+ * high band finds it. PHI-175.
+ */
+function drumKit(bpm, seconds, { kicks = [], snares = [], hats = [], hatAmp = 0.3 }) {
+  const out = new Float32Array(Math.round(RATE * seconds));
+  const beat = (60 / bpm) * RATE;
+  const bar = beat * 4;
+  // Seconds since the most recent hit in `positions`, wrapping across bars.
+  const since = (positions, i) => {
+    if (!positions.length) return 10;
+    const intoBar = i % bar;
+    let nearest = Infinity;
+    for (const p of positions) {
+      let d = intoBar - p * beat;
+      if (d < 0) d += bar;
+      nearest = Math.min(nearest, d);
+    }
+    return nearest / RATE;
+  };
+
+  for (let i = 0; i < out.length; i++) {
+    const tk = since(kicks, i);
+    const ts = since(snares, i);
+    const th = since(hats, i);
+    const kick = Math.sin(2 * Math.PI * 55 * tk) * Math.exp(-tk / 0.12) * 0.85;
+    const snare =
+      (Math.sin(2 * Math.PI * 190 * ts) * 0.4 + (Math.random() - 0.5) * 0.9) *
+      Math.exp(-ts / 0.07) *
+      0.6;
+    const hat = (Math.random() - 0.5) * Math.exp(-th / 0.02) * hatAmp;
+    out[i] = kick + snare + hat + (Math.random() - 0.5) * 0.015;
+  }
+  return out;
+}
+
 mkdirSync(HERE, { recursive: true });
 
 writeWav('tone-100hz.wav', tone(100, 6)); // squarely inside 20–250
@@ -148,6 +189,29 @@ writeWav('kick-174bpm.wav', kickPattern(174, 24));
 // The case that actually failed on hardware. 125 BPM is a 480 ms beat; the
 // bassline sits at 360 ms, and the old estimator reported the bassline.
 writeWav('kick-125bpm-bassline.wav', kickWithSyncopatedBass(125, 24));
+// The bassline at 90% of the kick. The kick-only estimator held this; an
+// early cut of the high-band change read it as 167 (PHI-175).
+writeWav('kick-125bpm-bassline-90.wav', kickWithSyncopatedBass(125, 24, 0.9));
+
+// Backbeats: the case that read half tempo on hardware. 118.8 is "Alright" as
+// it played in the 10/16 soak. The second moves the kick off beat 3, as
+// hip-hop often does; a kick-only estimate wandered 52-79 on it.
+const eighths = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
+writeWav('backbeat-119bpm.wav', drumKit(118.8, 24, { kicks: [0, 2], snares: [1, 3] }));
+writeWav(
+  'backbeat-119bpm-syncopated.wav',
+  drumKit(118.8, 24, { kicks: [0, 1.5, 2.5], snares: [1, 3], hats: eighths })
+);
+writeWav('backbeat-90bpm.wav', drumKit(90, 24, { kicks: [0, 2], snares: [1, 3], hats: eighths }));
+// House with loud off-beat hats. Hats half a beat from every kick are the
+// pattern most likely to pull a high-band vote off the beat.
+writeWav(
+  'house-125bpm-offbeat-hats.wav',
+  drumKit(125, 24, { kicks: [0, 1, 2, 3], hats: [0.5, 1.5, 2.5, 3.5], hatAmp: 1.2 })
+);
+// Drum and bass: kick on 1 and the "and" of 3, snare on 2 and 4. A kick-only
+// estimate read it as 43.
+writeWav('dnb-174bpm.wav', drumKit(174, 24, { kicks: [0, 2.5], snares: [1, 3], hats: eighths }));
 
 // Stage-load fixture for test/stall-trace.mjs. Sixty seconds, so a long dwell
 // does not loop mid-window.

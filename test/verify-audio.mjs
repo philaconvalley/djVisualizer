@@ -680,6 +680,14 @@ try {
   // The hardware failure: a bassline in the same band as the kick, on the
   // dotted eighth. The old estimator locked onto the bassline and read 156.
   await tempoTest('kick-125bpm-bassline.wav', 125);
+  await tempoTest('kick-125bpm-bassline-90.wav', 125);
+  // A kick on every beat is the one pattern a kick-only estimate gets right.
+  // These are the patterns where the snare and hats have to vote (PHI-175).
+  await tempoTest('backbeat-119bpm.wav', 119);
+  await tempoTest('backbeat-119bpm-syncopated.wav', 119);
+  await tempoTest('backbeat-90bpm.wav', 90);
+  await tempoTest('house-125bpm-offbeat-hats.wav', 125);
+  await tempoTest('dnb-174bpm.wav', 174);
   await modeTest();
   await silenceTest();
   await noSignalTest();

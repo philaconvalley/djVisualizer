@@ -233,7 +233,7 @@ It cannot cover device enumeration, USB line level, thermals, or the projector.
 
 
 ## BPM Detection Resources
-The current implementation in `app/audioProcessor.js` runs a kick-envelope follower in an `AudioWorklet` on the audio thread — a one-pole lowpass near 180 Hz, peak-held and posted at about 86 Hz with audio-clock timestamps. `detectBeat()` then peaks against a 700 ms running mean rather than a fixed threshold, so it survives the operator moving gain mid-set, with interval averaging and smoothing on top. For more robust or alternative BPM/onset detection strategies, these resources are helpful:
+The current implementation in `app/audioProcessor.js` runs two envelope followers in an `AudioWorklet` on the audio thread — a one-pole lowpass near 180 Hz for the kick, and the signal above about 2 kHz for the snare and hats — each peak-held and posted at about 86 Hz with audio-clock timestamps. `detectBeat()` finds onsets in each band against its own 700 ms running mean rather than a fixed threshold, so it survives the operator moving gain mid-set. `estimatePeriod()` then votes on the tempo with every pair of onsets from both bands, weighted by amplitude. Only kick onsets fire `onBeat`. For more robust or alternative BPM/onset detection strategies, these resources are helpful:
   - Meyda (feature extraction – spectral flux, energy, etc.): https://meyda.js.org/
   - music-tempo (tempo estimation from onset arrays): https://github.com/ibbatta/music-tempo
   - web-audio-beat-detector (utility for BPM estimation via Web Audio): https://github.com/chrisguttandin/web-audio-beat-detector
