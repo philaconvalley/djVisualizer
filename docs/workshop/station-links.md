@@ -50,4 +50,24 @@ one missing quote mark can swallow it.
 | A missing quote mark in `dj-name` does not stop the machine (2026-09-22) | Yes |
 | CodePen's frame allows the microphone and tab sharing (`allow` includes `microphone` and `display-capture`) | Yes |
 | Tab audio plays through the visualizer in the pen (2026-09-22, Chrome on macOS, YouTube tab) | Yes |
-| The pen works on a Coded by: Chromebook | Not yet |
+| The pen and the main app work on a Coded by: Chromebook 3100, microphone input (2026-09-28, Miracle Chatman) | Yes. The microphone prompt, the picture, and the FPS readout work |
+| The Coded by: network allows `codepen.io`, `cdpn.io`, and `dj-visualizer.netlify.app` (2026-09-28) | Yes |
+| The BPM readout shows a number on the Chromebook (2026-09-28) | Not checked. It showed a dash, because the test song had no kick drum |
+| "Choose a GIF" works on the Chromebook (2026-10-07) | Yes |
+| No "Verify you are human" box appears in the pen on the Chromebook (2026-10-07) | Yes |
+| Tab audio from a YouTube tab plays through the pen on the Chromebook | Not yet. Asked for the 10/21 run-through |
+| "Choose a song" plays an MP3 through the pen on the Chromebook | Not yet. Asked for the 10/21 run-through |
+| Flow, the template's default mode, stays smooth on the Chromebook | Not yet. Asked for the 10/21 run-through |
+
+## Frame rate on the Chromebook
+
+The Chromebook 3100 has a slow processor. On 2026-10-17 the modes ran in a
+headless browser with the processor slowed six times, as a rough model of it.
+Particles, Rings, Tunnel, and Polygons kept their full frame rate. Spectrum,
+Waves, and Flow fell to between 16 and 28 FPS. The model does not slow the
+graphics chip, and the Chromebook's graphics chip is also much weaker. Only a
+test on the real Chromebook gives the real numbers.
+
+Flow is the mode the template starts in. If it is slow on the real Chromebook
+at the run-through, change `mode="flow"` to `mode="rings"` in
+[`codepen/html-panel.html`](codepen/html-panel.html) and in the pen.
