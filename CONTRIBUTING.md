@@ -83,8 +83,8 @@ path: a real `MediaStream`, a real `AudioContext`, a real `AnalyserNode`, the
 real FFT, the real DOM. Only the microphone is substituted.
 
 It checks that a 100 Hz tone lights bass and nothing else, that 1 kHz lights mid,
-that 10 kHz lights high, that four kick patterns are detected at their real
-tempos, that all ten modes paint pixels without throwing, and that the meters
+that 10 kHz lights high, that kick patterns and drum-kit patterns are detected
+at their real tempos, that all ten modes paint pixels without throwing, and that the meters
 return to zero on stop. Screenshots of every mode land in `test/output/`.
 
 One tempo fixture is not a bare kick. `kick-125bpm-bassline.wav` puts a bassline
@@ -92,6 +92,26 @@ on the dotted eighth, in the same band as the kick, because a bare kick is the
 one signal a tempo estimator cannot get wrong — and a real 125 BPM track on the
 DDJ-REV1 read 147-158 while every bare-kick fixture passed. When you add a
 tempo fixture, make it something a DJ would actually play.
+
+The `backbeat-*`, `house-*`, and `dnb-*` fixtures are drum kits, and they are
+the reason the estimator listens to two bands. On a backbeat the kick plays
+only beats 1 and 3, so a kick-only estimate reads half the tempo: "Alright" at
+118.8 BPM read 62 on the DDJ-REV1. The worklet now also follows the band above
+2 kHz, where the snare and hats are, and both bands vote in one onset series.
+Three numbers in `estimatePeriod()` came from measurement. Change them only
+with the fixtures running:
+
+- **The ±2-bucket merge radius.** At 128 BPM, gaps between beats alternate
+  between 460 and 480 ms. A ±1 merge splits the true period's vote and reads 64.
+- **The 90th-percentile scale per band.** A maximum lets one crash cymbal shrink
+  every other hit for the 12-second window.
+- **The high-band scale floor, 15% of the kick's.** Without it, the clicks at
+  the start of each note in the bassline fixture get full weight. The bassline
+  at 90% of the kick then reads 167.
+
+Known limits, measured on real tracks: a slow hip-hop track with sixteenth-note
+hats can read double ("All Good" at 81 reads 163). A half-time trap pattern can
+read 4/3 of its tempo. The kick-only estimator failed both too.
 
 Run it before opening a pull request. It has already caught band splits that were
 off by an order of magnitude and a beat detector that starved under render load —
@@ -187,7 +207,9 @@ the laptop runs on battery (PHI-178).
    nothing. It should land within a few BPM and stay there. On a mix it takes
    roughly the length of the onset window — about 12 seconds — to adopt the new
    tempo. Pick a track with a busy bassline, not just a clean four-on-the-floor:
-   the failure this replaced only appeared on real music (PHI-175).
+   the failure this replaced only appeared on real music (PHI-175). Also play
+   one hip-hop track with a kick on 1 and 3 and a snare on 2 and 4. That is the
+   pattern that read half tempo.
 7. **Cycle all ten modes with keys 1–9 and 0 while the music plays.** Nothing should
    stall, and the FPS readout should stay usable. Spectrum and Particles are the
    documented safe modes on a slower machine. Run the check with the software you
