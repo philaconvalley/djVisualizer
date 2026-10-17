@@ -166,3 +166,6 @@ dropouts of PHI-181 did not recur.
 The event runs all day, and this test covered one hour. Reload the page between
 sets: a reload resets both the memory and the frame pacing. Spectrum, Waves,
 Mandala, and Flow were the cleanest modes through the hour.
+
+The operator checklist for the day is
+[`2026-10-20-founders-alley-checklist.md`](2026-10-20-founders-alley-checklist.md) (PHI-269).
