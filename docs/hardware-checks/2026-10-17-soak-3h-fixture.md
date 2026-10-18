@@ -9,8 +9,10 @@ fixture file, not the controller: `MINUTES=180 REAL_FS=1 node test/soak.mjs`.
 - **Main at:** `9291985` on the PHI-268 branch (`1dc2f9d` plus the per-process report)
 - **Controller:** none. The fixture run plays `broadband-124bpm.wav` as the input.
 - **Audio:** `broadband-124bpm.wav` in a loop, 124 BPM, no tempo change
-- **Surface:** ____
-- **Display resolution and DPR:** ____
+- **Surface:** the laptop panel, the main display. The driver set no window
+  position. An LG UltraFine 4K was also connected when the results were
+  written; nobody confirmed it was connected during the runs.
+- **Display resolution and DPR:** 3024 x 1964 Retina, DPR 2
 - **Rotation:** once a minute over all modes but custom (the default)
 - **Duration:** 180 minutes, 22:01 to 01:01
 
@@ -189,5 +191,5 @@ in the same mode.
 ## Failures found
 
 - FPS p05 fails in the last window: particles -14.3%, rings -15.8%. The p50
-  stays at 59 in every mode. The memory-infra run repeats it: particles
-  -14.3%. No ticket yet.
+  stays at 59 in every mode. The memory-infra run repeats it in the same two
+  modes, within one hour: particles -14.3%, rings -13%. No ticket yet.
