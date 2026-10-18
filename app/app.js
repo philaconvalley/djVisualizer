@@ -547,14 +547,19 @@ class DJVisualizerApp {
     // overridable in both directions. It selects the visualizer's low-motion
     // path. The flash ceiling itself is not here: it always runs, in the
     // render path, and nothing in the UI can raise it. PHI-265.
+    // The viewer's own choice is kept for the browser session, so a reload
+    // between sets does not drop it. The OS setting stays a floor. PHI-272.
     this.reduceMotion = document.getElementById('reduceMotion');
     if (this.reduceMotion) {
       const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-      this.reduceMotion.checked = query.matches;
+      this.reduceMotion.checked = query.matches || this.readReduceMotionChoice();
       this.applyReducedMotion();
-      this.reduceMotion.addEventListener('change', () => this.applyReducedMotion());
+      this.reduceMotion.addEventListener('change', () => {
+        this.storeReduceMotionChoice(this.reduceMotion.checked);
+        this.applyReducedMotion();
+      });
       query.addEventListener?.('change', (e) => {
-        this.reduceMotion.checked = e.matches;
+        this.reduceMotion.checked = e.matches || this.readReduceMotionChoice();
         this.applyReducedMotion();
       });
     }
@@ -564,6 +569,22 @@ class DJVisualizerApp {
 
   applyReducedMotion() {
     this.visualizer.setReducedMotion(this.reduceMotion.checked);
+  }
+
+  readReduceMotionChoice() {
+    try {
+      return sessionStorage.getItem('reduceMotionChosen') === 'true';
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  storeReduceMotionChoice(reduce) {
+    try {
+      sessionStorage.setItem('reduceMotionChosen', String(reduce));
+    } catch (_error) {
+      // Not remembered; the toggle falls back to the OS setting on reload.
+    }
   }
 
   // The warning comes before any visuals, on every device: a phone opened at
@@ -589,6 +610,7 @@ class DJVisualizerApp {
       answeredNow = true;
       if (reduce && this.reduceMotion) {
         this.reduceMotion.checked = true;
+        this.storeReduceMotionChoice(true);
         this.applyReducedMotion();
       }
       try {
