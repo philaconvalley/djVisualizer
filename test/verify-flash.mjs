@@ -638,6 +638,13 @@ async function reducedMotionTests() {
         () => document.getElementById('reduceMotion').checked && djApp.visualizer.reducedMotion
       );
       check('prefers-reduced-motion turns the calm path on', on);
+
+      // The system setting is a floor: a stored "off" does not beat it.
+      await page.evaluate(() => sessionStorage.setItem('reduceMotionChosen', 'false'));
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
+      const floor = await page.evaluate(() => document.getElementById('reduceMotion').checked);
+      check('prefers-reduced-motion wins over a stored off', floor);
     },
     { reducedMotion: true }
   );
@@ -698,6 +705,21 @@ async function phoneTests() {
       await page.reload({ waitUntil: 'load' });
       const again = await page.locator('#flashWarning[open]').count();
       check('an answered warning stays answered on reload', again === 0);
+
+      // The answer survives too, not only the fact of an answer. PHI-272.
+      await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
+      const kept = await page.evaluate(() => ({
+        checked: document.getElementById('reduceMotion').checked,
+        calm: djApp.visualizer.reducedMotion
+      }));
+      check('Reduce motion survives a reload', kept.checked && kept.calm);
+
+      // Turning it off at the console is also a choice, and it is kept.
+      await page.click('label.toggle');
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => typeof djApp !== 'undefined' && !!djApp.visualizer);
+      const off = await page.evaluate(() => document.getElementById('reduceMotion').checked);
+      check('turning Reduce motion off at the console survives a reload', !off);
     },
     { viewport: { width: 390, height: 844 } }
   );
