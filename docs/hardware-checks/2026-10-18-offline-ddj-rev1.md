@@ -75,6 +75,9 @@ This run checks the network only. The other items were not checked in it.
   checks are for runs of an hour or more and do not apply here. The heap floor
   rose 28.0 to 37.5 MB over eight minutes. Eight minutes is too short to
   judge memory. PHI-268 covers memory over long runs.
-- Nobody pressed the number keys. Before the event, open
-  `?modes=spectrum,waves,mandala,flow` and check that keys 1 to 4 select the
-  four modes.
+- The run did not press the number keys, so Waskar checked them by hand at
+  about 12:20, with the DDJ-REV1 playing. On
+  `?modes=spectrum,waves,mandala,flow`, keys 1 to 4 select the four modes. A
+  first try failed: the address bar held the cut-off URL
+  `?modes=spectrum,waves,`, which loads two modes. The event checklist now
+  says to open the show URL from a bookmark.
