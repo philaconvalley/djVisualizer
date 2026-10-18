@@ -120,6 +120,22 @@ checked by hand with `sandbox/probe.html`.
 | <kbd>R</kbd> | Reset all sensitivities |
 | <kbd>?</kbd> | Show or hide the controls panel |
 
+### Show list
+
+To keep a set to a few modes, name them in the URL:
+
+```
+http://localhost:8000/?modes=spectrum,waves,mandala,flow
+```
+
+The dropdown then shows only those modes, in that order. The number keys follow
+the dropdown, so <kbd>1</kbd> is Spectrum Bars and <kbd>4</kbd> is Flow. Other keys
+do nothing, and the help panel lists only the keys that work. The names are the
+dropdown values: `spectrum`, `particles`, `rings`,
+`waves`, `mandala`, `tunnel`, `galaxy`, `polygons`, `custom`, `flow`. An unknown
+name logs a warning in the console. If no name is known, the app shows all ten
+modes. `npm run verify:show-list` checks all of this in Chromium.
+
 ## Photosensitivity
 
 This visualizer reacts to music with changes in brightness and is designed to be
