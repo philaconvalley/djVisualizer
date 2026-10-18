@@ -203,5 +203,21 @@ function check(name, cond, detail = '') {
   );
 }
 
+{
+  // 10/16: the total passed at +2.7% while the renderer rose 9% under a big
+  // flat GPU process. The per-process series must show the one that climbs.
+  const run = makeRun();
+  run.host.forEach((h, i) => {
+    h.footprintByType = { renderer: (200 + i) * 1048576, GPU: 620 * 1048576 };
+    h.footprintBytes = h.footprintByType.renderer + h.footprintByType.GPU;
+  });
+  const r = analyze(run);
+  const proc = (type) => r.series.byProcess.find((p) => p.type === type);
+  check('per process: total alone passes', r.verdicts.processMemory.pass === true);
+  check('per process: renderer climb shows', proc('renderer')?.verdict.growth > 10);
+  check('per process: flat GPU reads 0%', proc('GPU')?.verdict.growth === 0);
+  check('per process: report has the table', toMarkdown(r).includes('| renderer | GPU |'));
+}
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);
