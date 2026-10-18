@@ -259,6 +259,17 @@ export function analyze(state, { windowMin = 10 } = {}) {
     );
   const cdpHeap = series(host, windowMs, durationMs, (h) => h.jsHeapUsed ?? null);
 
+  // The same memory, one series per process type. The total hides a slow
+  // process behind a big flat one: on 10/16 the total passed at +2.7% while
+  // the renderer rose 9% under a 620 MB GPU process that did not move. Which
+  // process climbs is also the first clue to the source (PHI-268).
+  const typeKey = hasFootprint ? 'footprintByType' : 'rssByType';
+  const types = [...new Set(host.flatMap((h) => Object.keys(h[typeKey] || {})))];
+  const byProcess = types.map((type) => {
+    const points = series(host, windowMs, durationMs, (h) => h[typeKey]?.[type] ?? null);
+    return { type, points, verdict: memVerdict(points) };
+  });
+
   // BPM.
   const bpmPass =
     w1.bpm.jitter == null || w2.bpm.jitter == null
@@ -283,7 +294,7 @@ export function analyze(state, { windowMin = 10 } = {}) {
     windowMin,
     first: w1,
     last: w2,
-    series: { heap, dom, rss, cdpHeap },
+    series: { heap, dom, rss, cdpHeap, byProcess },
     memoryMeasure: hasFootprint ? 'footprint' : 'rss',
     host: {
       first: host[0] ?? null,
@@ -347,6 +358,22 @@ export function toMarkdown(r) {
       `| ${h.fromMin} | ${mb(h.median)} | ${r.series.dom[i]?.median ?? '—'} | ${mb(r.series.rss[i]?.median)} |`
     );
   });
+  const procs = r.series.byProcess || [];
+  if (procs.length) {
+    // `network.mojom.NetworkService` reads as `network` in a column head.
+    const head = procs.map((p) => p.type.split('.')[0]);
+    L.push('');
+    L.push(`${memName} per process, median per window. Reported, not judged:`);
+    L.push('');
+    L.push(`| From (min) | ${head.join(' | ')} |`);
+    L.push(`|---|${head.map(() => '---').join('|')}|`);
+    r.series.rss.forEach((w, i) => {
+      L.push(`| ${w.fromMin} | ${procs.map((p) => mb(p.points[i]?.median)).join(' | ')} |`);
+    });
+    L.push(
+      `| Second -> last window | ${procs.map((p) => (p.verdict.pass == null ? '—' : pc(p.verdict.growth))).join(' | ')} |`
+    );
+  }
   L.push('');
   L.push('| | First window | Last window |');
   L.push('|---|---|---|');

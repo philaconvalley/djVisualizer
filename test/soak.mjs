@@ -42,6 +42,11 @@
  *   WINDOW_AT=1512,0  open the window at this screen point (external display)
  *   MODES=rings,flow  rotate over these modes only. Default: all but custom.
  *                     A smoke run needs few modes, so its short windows share some.
+ *   MEMDUMP=10,60     at these minutes, take a Chrome memory-infra dump: every
+ *                     process split into pools (skia, gpu, cc, v8, ...). The
+ *                     dumps go to soak-<start>-memdump.json, and the report
+ *                     ends with what grew from the first dump to the last
+ *                     (PHI-268). A trace service process appears while it runs.
  *
  * Physical state is not measurable from here. Record it by hand in the
  * results file: fan noise, case temperature, surface, room temperature. See
@@ -56,6 +61,7 @@ import { dirname, join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { analyze, toMarkdown } from './soak-analysis.mjs';
+import { dump, compare } from './memory-dump.mjs';
 
 const run = promisify(execFile);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +77,7 @@ const WAV = process.env.WAV || 'broadband-124bpm.wav';
 const REAL_FS = process.env.REAL_FS === '1';
 const WINDOW_AT = process.env.WINDOW_AT;
 const MODES = process.env.MODES ? process.env.MODES.split(',') : undefined;
+const MEMDUMP = process.env.MEMDUMP ? process.env.MEMDUMP.split(',').map(Number) : [];
 const HOST_EVERY_MS = 60000;
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -204,6 +211,8 @@ async function pageHeap(cdp) {
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const jsonPath = join(OUT, `soak-${stamp}.json`);
 const mdPath = join(OUT, `soak-${stamp}.md`);
+const dumpPath = join(OUT, `soak-${stamp}-memdump.json`);
+const dumps = [];
 await mkdir(OUT, { recursive: true });
 
 const awake = spawn('caffeinate', ['-dimsu'], { stdio: 'ignore' });
@@ -238,7 +247,7 @@ async function finish(reason) {
       jsonPath,
       JSON.stringify({ options: { MINUTES, ROTATE, WINDOW, LIVE, WAV, REAL_FS, MODES }, state })
     );
-    const md = toMarkdown(analyze(state, { windowMin: WINDOW }));
+    const md = toMarkdown(analyze(state, { windowMin: WINDOW })) + dumpReport();
     await writeFile(mdPath, md + '\n');
     console.log(`\n${md}\n`);
     console.log(`wrote test/output/soak-${stamp}.json and .md`);
@@ -250,6 +259,26 @@ async function finish(reason) {
     server.close();
     awake.kill();
   }
+}
+function dumpReport() {
+  if (dumps.length < 2) return '';
+  const [a, b] = [dumps[0], dumps.at(-1)];
+  const mb = (n) => (n / 1048576).toFixed(1);
+  const rows = compare(a, b)
+    // The trace's own buffers show as global/* and shared_memory/* in every
+    // process. Shared memory is also counted again by the pool that owns it.
+    .filter((r) => !/^(global|shared_memory)/.test(r.name) && !/tracing/.test(r.label))
+    .filter((r) => r.after - r.before >= 512 * 1024)
+    .slice(0, 25)
+    .map(
+      (r) =>
+        `| ${r.label} | ${r.name} | ${mb(r.before)} | ${mb(r.after)} | ${mb(r.after - r.before)} |`
+    );
+  return (
+    `\n\nMemory-infra growth, minute ${a.minute} to minute ${b.minute}, 0.5 MB or more:\n\n` +
+    '| Process | Pool | Before MB | After MB | Growth MB |\n|---|---|---|---|---|\n' +
+    (rows.join('\n') || '| none | | | | |')
+  );
 }
 process.on('SIGINT', () => finish('Ctrl-C').then(() => process.exit(0)));
 
@@ -310,7 +339,9 @@ try {
   );
   console.log(`[soak] writing test/output/soak-${stamp}.json every minute. Ctrl-C ends early.`);
 
-  const endAt = Date.now() + MINUTES * 60000;
+  const startMs = Date.now();
+  const endAt = startMs + MINUTES * 60000;
+  const dueDumps = [...MEMDUMP].sort((x, y) => x - y);
   while (Date.now() < endAt && !finished) {
     const row = {
       ...(await power()),
@@ -328,6 +359,16 @@ try {
         state
       })
     );
+    if (dueDumps.length && Date.now() - startMs >= dueDumps[0] * 60000) {
+      const minute = dueDumps.shift();
+      try {
+        dumps.push({ minute, ...(await dump(browserCdp)) });
+        await writeFile(dumpPath, JSON.stringify(dumps));
+        console.log(`[soak] memory dump at minute ${minute}`);
+      } catch (e) {
+        console.warn(`[soak] memory dump at minute ${minute} failed: ${e.message}`);
+      }
+    }
     const status = await page.evaluate(() => soak.status());
     console.log(
       `${status}, browser ${row.footprintBytes ? (row.footprintBytes / 1048576).toFixed(0) : '—'} MB, ${row.power ?? ''} ${row.battery ?? ''}${row.lowPowerMode ? ', LOW POWER MODE' : ''}`
