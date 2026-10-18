@@ -12,6 +12,7 @@
     "verify:sandbox": "node test/verify-sandbox.mjs",
     "verify:flash": "node test/fixtures/make-audio.mjs && node test/verify-flash.mjs",
     "verify:soak": "node test/verify-soak.mjs",
+    "verify:show-list": "node test/verify-show-list.mjs",
     "soak": "node test/soak.mjs",
     "smoke": "node test/smoke-deploy.mjs",
     "format": "prettier --write .",

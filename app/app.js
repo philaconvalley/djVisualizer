@@ -123,6 +123,9 @@ class DJVisualizerApp {
       }
     });
 
+    // Before the visualizer reads the dropdown, so its first mode is a listed one.
+    this.applyShowList();
+
     // Initialize visualizer
     this.visualizer.init();
 
@@ -476,12 +479,62 @@ class DJVisualizerApp {
     }
   }
 
+  // `?modes=spectrum,waves,mandala,flow` cuts the dropdown down to a show list,
+  // in the order given. The number keys read the dropdown, so they renumber
+  // from 1 with no change of their own, and a slipped key cannot reach a mode
+  // the operator left out. PHI-271.
+  //
+  // A list that names no real mode is ignored rather than obeyed: a typo in the
+  // URL must not leave the stage with nothing to show.
+  applyShowList() {
+    const param = new URLSearchParams(location.search).get('modes');
+    if (param === null) return;
+
+    const select = document.getElementById('visualMode');
+    const byValue = new Map([...select.options].map((opt) => [opt.value, opt]));
+    const wanted = [...new Set(param.split(',').map((name) => name.trim().toLowerCase()))].filter(
+      Boolean
+    );
+    const unknown = wanted.filter((name) => !byValue.has(name));
+    if (unknown.length) {
+      console.warn(
+        `?modes: no mode named ${unknown.join(', ')}. Known: ${[...byValue.keys()].join(', ')}`
+      );
+    }
+
+    const listed = wanted.filter((name) => byValue.has(name)).map((name) => byValue.get(name));
+    if (!listed.length) return;
+
+    select.replaceChildren(...listed);
+    select.selectedIndex = 0;
+
+    // The visualizer has not attached its change listener yet, so set its
+    // starting mode directly, along with the one control that follows the mode.
+    this.visualizer.currentMode = select.value;
+    document.getElementById('customMediaSection').hidden = select.value !== 'custom';
+
+    // The help panel must not promise keys the show list took away.
+    const keys =
+      listed.length === 1 ? '<kbd>1</kbd>' : `<kbd>1</kbd>&ndash;<kbd>${listed.length}</kbd>`;
+    document.getElementById('helpModeKeys').innerHTML = keys;
+    document.getElementById('helpModeAction').textContent =
+      `Switch between the ${listed.length} modes in this show list`;
+  }
+
   switchVisualizationMode(mode) {
     const visualModeSelect = document.getElementById('visualMode');
-    if (visualModeSelect) {
-      visualModeSelect.value = mode;
-      visualModeSelect.dispatchEvent(new Event('change'));
+    if (!visualModeSelect) return;
+
+    // Setting a <select> to a value it has no option for empties it, and the
+    // visualizer would then take '' as its mode and draw nothing. With a show
+    // list active, any caller can ask for a mode that is no longer there.
+    if (![...visualModeSelect.options].some((opt) => opt.value === mode)) {
+      console.warn(`Mode "${mode}" is not in the mode list. Staying on ${visualModeSelect.value}.`);
+      return;
     }
+
+    visualModeSelect.value = mode;
+    visualModeSelect.dispatchEvent(new Event('change'));
   }
 
   resetGains() {
