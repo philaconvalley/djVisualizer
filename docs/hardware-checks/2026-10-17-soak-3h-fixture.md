@@ -145,7 +145,49 @@ Browser footprint (MB) per process, median per window. Reported, not judged:
 
 Page errors: 0
 
+## Memory-infra run, 2026-10-18
+
+A second run finds which memory pool grows. It runs for 62 minutes at
+`5352d83`, on AC power, with Low Power Mode off:
+`MINUTES=62 REAL_FS=1 MEMDUMP=10,35,60 node test/soak.mjs`.
+The driver takes a detailed Chrome memory dump at minutes 10, 35, and 60.
+
+No pool climbs steadily. The three sources the ticket names are flat:
+
+| Pool | Process | Minute 10 | Minute 35 | Minute 60 | What it holds |
+|---|---|---|---|---|---|
+| `webgl` | renderer | 258.6 | 258.6 | 258.6 | the WebGL context |
+| `malloc` | renderer | 43.4 | 42.2 | 43.2 | general native memory |
+| `partition_alloc` | renderer | 26.1 | 25.9 | 25.8 | Blink objects and array buffers, Web Audio buffers included |
+| `iosurface` | GPU | 214.4 | 219.7 | 217.1 | GPU textures shown on screen |
+| `gpu` | GPU | 100.0 | 95.0 | 100.0 | GPU command and texture memory |
+| `canvas` | renderer | 29.8 | 34.8 | 29.8 | canvas backing stores |
+| `cc` | renderer | 26.2 | 31.5 | 28.8 | compositor tiles |
+
+Sizes are in MB. Pools that go up and come back down are caches. Each dump
+came in a different mode (particles, flow, galaxy), and each mode fills the
+caches by a different amount.
+
+At the dump minutes, the renderer footprint reads 200, 206, then 203 MB. The
+GPU process reads 514, 521, then 519 MB.
+
+Two numbers in this run's report are not app memory:
+
+- The network, storage, audio, and video capture services each gain 4 to 5 MB
+  at the first dump. That is the trace's own buffers.
+- A tracing service process (61 MB) runs from the first dump to the end.
+
+**Conclusion.** The three-hour run shows a slow climb of 13 to 21 MB an hour.
+One hour of dumps finds no pool that leaks. The WebGL context, the GPU
+textures, and the audio buffers are flat at this resolution. Any steady
+climb is smaller than the normal swing of the caches. A six-hour show at this
+rate adds about 100 MB.
+
+To find a climb this small, a later run needs three hours of dumps, all taken
+in the same mode.
+
 ## Failures found
 
 - FPS p05 fails in the last window: particles -14.3%, rings -15.8%. The p50
-  stays at 59 in every mode. No ticket yet.
+  stays at 59 in every mode. The memory-infra run repeats it: particles
+  -14.3%. No ticket yet.
