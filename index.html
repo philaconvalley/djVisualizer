@@ -126,18 +126,8 @@
       <section class="console-group console-group--output">
         <label class="field">
           <span class="field-label">Mode</span>
-          <select id="visualMode" class="field-control">
-            <option value="spectrum">Spectrum Bars</option>
-            <option value="particles">Floating Particles</option>
-            <option value="rings">Frequency Rings</option>
-            <option value="waves">Wave Forms</option>
-            <option value="mandala">Mandala</option>
-            <option value="tunnel">Tunnel Vision</option>
-            <option value="galaxy">Galaxy</option>
-            <option value="polygons">Polygon Collage</option>
-            <option value="custom">Custom Upload</option>
-            <option value="flow">Flow</option>
-          </select>
+          <!-- Filled from the mode registry, app/modes/index.js. PHI-163. -->
+          <select id="visualMode" class="field-control"></select>
         </label>
 
         <div class="readout">
@@ -264,8 +254,8 @@
       </div>
     </dialog>
 
-    <script src="app/audioProcessor.js"></script>
-    <script src="app/visualizer.js"></script>
-    <script src="app/app.js"></script>
+    <!-- ES modules: app.js imports everything else. Modules do not load from
+         file://, so serve this folder (README, "Run it"). -->
+    <script type="module" src="app/app.js"></script>
   </body>
 </html>

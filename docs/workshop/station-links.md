@@ -21,7 +21,10 @@ into the pen and save the pen. The two must stay the same.
 | [`codepen/css-panel.css`](codepen/css-panel.css) | The CSS box: the three colours |
 | [`codepen/js-panel.js`](codepen/js-panel.js) | The JS box: a note only. Students do not edit it |
 
-The head lines load the machine from the live site. CodePen puts them in the page's
+The head lines load the machine from the live site. Since PHI-163 the machine is one ES module,
+`sandbox/engine.js`, which imports the rest. A browser loads a module from another site only if
+that site allows it, so `netlify.toml` sends `Access-Control-Allow-Origin` for `/app/*` and
+`/sandbox/*`. Without that header the pen shows a black stage. CodePen puts them in the page's
 `<head>`, above the HTML box. That keeps the rule from `sandbox/index.html`: the browser
 reads a page from the top down, so a student's typo in the HTML box cannot stop the
 machine from loading. Do not move these lines into CodePen's "Add External Scripts"
@@ -58,6 +61,7 @@ one missing quote mark can swallow it.
 | Tab audio from a YouTube tab plays through the pen on the Chromebook | Not yet. Asked for the 10/21 run-through |
 | "Choose a song" plays an MP3 through the pen on the Chromebook | Not yet. Asked for the 10/21 run-through |
 | Flow, the template's default mode, stays smooth on the Chromebook | Not yet. Asked for the 10/21 run-through |
+| The pen loads the machine as an ES module (PHI-163) after the new `head.html` is pasted into the pen | Not yet. Checked only in a two-origin local test, not on codepen.io |
 
 ## Frame rate on the Chromebook
 

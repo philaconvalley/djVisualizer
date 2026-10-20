@@ -62,6 +62,8 @@ function serve() {
 // the seam is genuinely source-agnostic.
 async function seamTest(page) {
   const reading = await page.evaluate(async () => {
+    // A module's exports are not globals; import the page's own copy.
+    const { AudioProcessor } = await import('/app/audioProcessor.js');
     const processor = new AudioProcessor();
     const context = new AudioContext();
     const destination = context.createMediaStreamDestination();
@@ -90,6 +92,8 @@ async function seamTest(page) {
 // the 20–250 Hz bass band and nowhere else.
 async function fileSourceTest(page) {
   const reading = await page.evaluate(async (base) => {
+    // A module's exports are not globals; import the page's own copy.
+    const { AudioProcessor } = await import('/app/audioProcessor.js');
     const processor = new AudioProcessor();
     await processor.startFileAudio(base + '/test/fixtures/tone-100hz.wav');
     await new Promise((r) => setTimeout(r, 1500));
@@ -109,6 +113,8 @@ async function fileSourceTest(page) {
 // switching tracks ten times leaks ten decoded files.
 async function fileTeardownTest(page) {
   const state = await page.evaluate(async (base) => {
+    // A module's exports are not globals; import the page's own copy.
+    const { AudioProcessor } = await import('/app/audioProcessor.js');
     const processor = new AudioProcessor();
     await processor.startFileAudio(base + '/test/fixtures/tone-1khz.wav');
     await new Promise((r) => setTimeout(r, 400));
@@ -154,6 +160,8 @@ async function tabCaptureTest(page) {
       return Promise.resolve(stream);
     };
 
+    // A module's exports are not globals; import the page's own copy.
+    const { AudioProcessor } = await import('/app/audioProcessor.js');
     const processor = new AudioProcessor();
     await processor.startTabAudio();
     await new Promise((r) => setTimeout(r, 1200));
@@ -193,6 +201,8 @@ async function tabCaptureNoAudioTest(page) {
 
     navigator.mediaDevices.getDisplayMedia = () => Promise.resolve(videoOnly);
 
+    // A module's exports are not globals; import the page's own copy.
+    const { AudioProcessor } = await import('/app/audioProcessor.js');
     const processor = new AudioProcessor();
     try {
       await processor.startTabAudio();
@@ -1024,8 +1034,8 @@ const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gestur
 try {
   const page = await browser.newPage();
   page.on('pageerror', (error) => check('page threw', false, error.message));
+  // The analyser tests below import app/audioProcessor.js themselves.
   await page.goto(`${BASE}/sandbox/probe.html`);
-  await page.addScriptTag({ url: `${BASE}/app/audioProcessor.js` });
 
   await seamTest(page);
   await fileSourceTest(page);

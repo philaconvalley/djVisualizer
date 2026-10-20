@@ -55,12 +55,16 @@ class method silently replaces the first one, and a value computed but never
 read often means code that was never connected. Both have happened in this
 repo. A pull request that fails lint cannot merge.
 
-The three app scripts share one global scope, because `index.html` loads them
-as classic scripts. `eslint.config.mjs` declares each shared name only in the
-files that read it, so a typo in a global name still fails. Those declarations
-are temporary: they go away when the app moves to ES modules (PHI-163). If you
-add a name that another file reads, declare it there too, rather than turning
-off `no-undef`.
+The app and the sandbox are ES modules. Each file imports the names it uses and
+exports the names other files use, so a name used without an import fails lint.
+The one global is `p5`, the vendored classic script every page loads first. If
+another file needs a name, export it and import it there. Do not turn off
+`no-undef`, and do not put a name on `window`. The one exception is `djApp`,
+which `app/app.js` puts on `window` so the console probes and the test drivers
+can reach it.
+
+Because the app is modules, open it through a local server, never as a
+`file://` page. The browser does not load modules from `file://`.
 
 The repo was reformatted once, in a single commit that changed nothing else.
 That commit is listed in `.git-blame-ignore-revs`. GitHub's blame view skips it
@@ -276,24 +280,81 @@ asserts each verdict, in under a second. Run it after you change
 
 ## Adding a visualization mode
 
-1. Add an `<option>` to `#visualMode` in `index.html`. Keys 1–9 then 0 map to
-   dropdown order automatically, so position matters — and there are ten modes
-   already, so an eleventh would need a shortcut scheme that is not digits.
-2. Add a `case` to the switch in `DJVisualizer.draw()`.
-3. Write the draw function. It must obey the stage grammar documented in the
-   header of `app/visualizer.js` and explained in `DESIGN.md`:
-   - Take colour from `this.colors.bass|mid|high`, which is read from the CSS
-     tokens. Never hard-code a hue.
-   - Read levels through `this.band('bass')`, never from `audioData` directly —
-     that is what gives every mode the same response curve and the same honest
-     behaviour in silence.
-   - Draw light with `emissiveStroke` / `emissiveDot` rather than flat strokes.
-   - Time motion off `this.phase` and `this.beat` rather than `this.time`, unless
-     you specifically want something that ignores the music.
-   - Compose inside `this.vw` × `this.vh`, which already excludes the rail.
-4. Run `npm run verify` and look at your mode's screenshot in `test/output/`.
+A mode is one file. You do not edit `index.html`, `app/visualizer.js`, or the
+sandbox. They all read the registry.
 
-Do not reintroduce a `|| Math.sin(this.time)` fallback for a missing signal.
+1. Make a file in `app/modes/`, for example `app/modes/ripples.js`. Start with
+   this:
+
+   ```js
+   import { emissiveStroke } from '../paint.js';
+
+   /* Ripples — one line on what the mode is, then why it looks the way it does. */
+
+   export default {
+     id: 'ripples', // the dropdown value and the ?modes= word
+     label: 'Ripples', // what the dropdown shows
+
+     draw(p, stage) {
+       const lit = stage.band('bass');
+       const radius = Math.min(stage.vw, stage.vh) * (0.2 + lit * 0.2);
+       emissiveStroke(p, stage.colors.bass, 60 + lit * 170, 1.5 + lit * 3, () =>
+         p.circle(0, 0, radius * 2)
+       );
+     }
+   };
+   ```
+
+2. Import it in `app/modes/index.js` and add it to `MODES`. The position in the
+   array is the position in the dropdown. Keys 1–9 then 0 follow that order.
+   There are ten modes already, so an eleventh needs a shortcut scheme that is
+   not digits.
+3. Follow the stage grammar. The header of `app/visualizer.js` states it, and
+   `DESIGN.md` explains it:
+   - Take colour from `stage.colors.bass|mid|high`, which is read from the CSS
+     tokens. Never hard-code a hue.
+   - Read levels through `stage.band('bass')`, never from `stage.audio`
+     directly. That gives every mode the same response curve and the same
+     honest behaviour in silence.
+   - Draw light with `emissiveStroke` and `emissiveDot` from `app/paint.js`,
+     not with flat strokes.
+   - Time motion off `stage.phase` and `stage.beat`, not `stage.time`, unless
+     you want something that ignores the music.
+   - Compose inside `stage.vw` × `stage.vh`, which already excludes the rail.
+4. Run `npm run verify` and look at your mode's screenshot in `test/output/`.
+   It finds your mode in the registry by itself.
+
+The full contract is in the header of `app/modes/index.js`. Most modes need
+only `id`, `label`, and `draw`. The optional parts exist because the modes are
+not all the same shape:
+
+- `setup(stage)` returns the mode's own state, which `draw` receives as its
+  third argument. Floating Particles keeps its particles there. It runs when
+  the mode is chosen, and again after a resize or a stop.
+- `clearsBackground: false` gives the mode a 2D canvas that is not cleared
+  between frames, as `stage.layer`. Polygon Collage uses it to build up paint.
+- `additive: false` turns off additive blending, for a picture, not light.
+- `usesMedia: true` shows the upload control and passes the file as
+  `stage.media`. Custom Upload uses it.
+
+If your mode needs something that `stage` does not carry, do not reach into
+the visualizer for it. Open an issue. A new field in `stage` is a change to
+the contract every mode shares, and it deserves a look of its own.
+
+### Why a registry and not a switch
+
+The modes used to live in one `switch` in `DJVisualizer.draw()`. A new mode
+needed an `<option>` in `index.html`, a `case` in the switch, and a method in
+the class, joined only by a string that had to match in all three places. A
+switch is fine for two or three fixed cases. It stops being fine when new cases
+come often, and from people who do not know the rest of the file. Then every
+addition edits the same shared function. That causes merge conflicts, and the
+function grows with nobody owning it. A registry turns an addition into a new
+file plus one line (PHI-163). The cost is one more step to answer "where does
+this run": the answer is `draw()` in `app/visualizer.js`, which calls
+`mode.draw` on the active mode.
+
+Do not reintroduce a `|| Math.sin(stage.time)` fallback for a missing signal.
 Every mode used to have one, and the result was that a dead input looked like a
 loud room — a meter that invents a reading is worse than one that reads zero.
 

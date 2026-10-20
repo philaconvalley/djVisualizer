@@ -5,16 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <!-- ===================== THE MACHINE. LEAVE THIS ALONE. =====================
-         These five lines load the visualizer. They sit above your part of the
-         file on purpose. The browser reads a page from the top down, so by the
-         time it reaches your part, the machine is already running. That is why a
+         These three lines load the visualizer. They sit above your part of the
+         file on purpose. The browser reads a page from the top down, so it has
+         already asked for the machine before it reaches your part. That is why a
          mistake in your part can never stop the music or the picture. -->
 
     <link rel="stylesheet" href="sandbox.css" />
     <script src="../vendor/p5.min.js"></script>
-    <script src="../app/audioProcessor.js"></script>
-    <script src="../app/visualizer.js"></script>
-    <script src="engine.js"></script>
+    <script type="module" src="engine.js"></script>
 
     <!-- ========================= YOUR PART STARTS HERE ========================= -->
 

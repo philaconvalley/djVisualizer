@@ -16,63 +16,14 @@ export default [
     }
   },
 
-  // The app: three classic scripts that index.html loads in order. They share
-  // one global scope, so each file declares only the names it reads from the
-  // others, and marks the names it provides as used elsewhere.
-  //
-  // TRANSITIONAL: this whole block exists because the app is not ES modules.
-  // When PHI-163 converts it to explicit imports and exports, delete the
-  // per-file globals and varsIgnorePattern entries below.
+  // The app and the sandbox are ES modules with explicit imports and exports,
+  // so a name used without an import is an error. p5 is the one global: it is the
+  // vendored classic script every page loads before the modules. PHI-163.
   {
-    files: ['app/**/*.js'],
+    files: ['app/**/*.js', 'sandbox/**/*.js'],
     languageOptions: {
-      sourceType: 'script',
-      globals: { ...globals.browser }
-    }
-  },
-  {
-    files: ['app/audioProcessor.js'],
-    rules: {
-      'no-unused-vars': [
-        'error',
-        {
-          argsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-          varsIgnorePattern: '^(AudioProcessor|BANDS|DEBUG)$'
-        }
-      ]
-    }
-  },
-  {
-    files: ['app/visualizer.js'],
-    languageOptions: {
-      globals: { p5: 'readonly', BANDS: 'readonly' }
-    },
-    rules: {
-      'no-unused-vars': [
-        'error',
-        {
-          argsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-          varsIgnorePattern: '^DJVisualizer$'
-        }
-      ]
-    }
-  },
-  {
-    files: ['app/app.js'],
-    languageOptions: {
-      globals: { AudioProcessor: 'readonly', DJVisualizer: 'readonly', DEBUG: 'readonly' }
-    }
-  },
-
-  // The sandbox entry point. Classic script, loaded after the app's files, so
-  // it reads their globals from the shared scope the same way app.js does.
-  {
-    files: ['sandbox/**/*.js'],
-    languageOptions: {
-      sourceType: 'script',
-      globals: { ...globals.browser, AudioProcessor: 'readonly', DJVisualizer: 'readonly' }
+      sourceType: 'module',
+      globals: { ...globals.browser, p5: 'readonly' }
     }
   },
 
@@ -87,10 +38,7 @@ export default [
         ...globals.browser,
         djApp: 'readonly',
         hw: 'readonly',
-        soak: 'readonly',
-        AudioProcessor: 'readonly',
-        DJVisualizer: 'readonly',
-        FlashMeter: 'readonly'
+        soak: 'readonly'
       }
     }
   },

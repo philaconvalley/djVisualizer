@@ -1,7 +1,7 @@
 /* Proves the flash ceiling by measurement. PHI-265.
  *
  * WCAG 2.3.1: no more than three flashes in any one second. The guard lives
- * in app/visualizer.js; this harness checks it three ways, each one closer to
+ * in app/flashGuard.js; this harness checks it three ways, each one closer to
  * the room:
  *
  *   1. Logic. FlashGuard alone, in Node, fed synthetic frames: a 12 Hz
@@ -42,8 +42,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
 import { chromium } from 'playwright';
+import { FlashGuard } from '../app/flashGuard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -74,10 +74,6 @@ function check(name, passed, detail) {
 
 async function logicTests() {
   console.log('\n1. FlashGuard logic, synthetic frames at 60 FPS');
-  const source = await readFile(join(ROOT, 'app', 'visualizer.js'), 'utf8');
-  const context = vm.createContext({});
-  vm.runInContext(`${source}\nthis.FlashGuard = FlashGuard;`, context);
-  const { FlashGuard } = context;
 
   const COLS = 64;
   const ROWS = 36;
@@ -284,7 +280,9 @@ async function start(page) {
 
 // Resets the meter, runs a mode, and returns the worst window it saw.
 async function measureMode(page, mode, seconds = SECONDS_PER_MODE) {
-  await page.evaluate((m) => {
+  await page.evaluate(async (m) => {
+    // The page's own copy of the module: same URL, so the same class.
+    const { FlashMeter } = await import('/app/flashGuard.js');
     djApp.switchVisualizationMode(m);
     djApp.visualizer.flashMeter = new FlashMeter();
   }, mode);
@@ -366,7 +364,7 @@ async function strobeTests() {
       page.evaluate(
         ([c, region]) => {
           const v = djApp.visualizer;
-          v.drawSpectrum = (p) => {
+          v.modes.get('spectrum').draw = (p) => {
             if (Math.floor(performance.now() / (1000 / 24)) % 2 !== 0) return;
             p.noStroke();
             p.fill(...c);
@@ -407,12 +405,11 @@ async function strobeTests() {
     // Polygon Collage paints a 2D canvas under the WEBGL one. The veil is on
     // the WEBGL canvas, so this proves it darkens the layer beneath it.
     await page.evaluate(() => {
-      const v = djApp.visualizer;
-      v.drawPolygonCollage = () => {
-        v.ensureCollage();
+      djApp.visualizer.modes.get('polygons').draw = (_p, stage) => {
+        const { canvas, ctx } = stage.layer;
         const on = Math.floor(performance.now() / (1000 / 24)) % 2 === 0;
-        v.collageCtx.fillStyle = on ? '#ffffff' : '#000000';
-        v.collageCtx.fillRect(0, 0, v.collageCanvas.width, v.collageCanvas.height);
+        ctx.fillStyle = on ? '#ffffff' : '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       };
     });
     expectHeld(
@@ -450,10 +447,10 @@ async function compositeTest() {
       const v = djApp.visualizer;
       v.flashMeter = null;
       v.flashGuard.process = () => ({ scale: 0.5, raw: [], shown: [] });
-      v.drawPolygonCollage = () => {
-        v.ensureCollage();
-        v.collageCtx.fillStyle = '#ffffff';
-        v.collageCtx.fillRect(0, 0, v.collageCanvas.width, v.collageCanvas.height);
+      v.modes.get('polygons').draw = (_p, stage) => {
+        const { canvas, ctx } = stage.layer;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       };
       djApp.switchVisualizationMode('polygons');
     });

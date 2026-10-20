@@ -1,6 +1,6 @@
 /* DJ Visualizer — the stage.
  *
- * Every mode in this file obeys one grammar, described in DESIGN.md under
+ * Every mode in app/modes/ obeys one grammar, described in DESIGN.md under
  * "The stage grammar". The short version, because it is the thing that was
  * missing and it has to be legible from the code alone:
  *
@@ -19,304 +19,9 @@
  *   6. The composition lives above the rail. The console never covers content.
  */
 
-/* Flash guard — the last stage of the render path. PHI-265.
- *
- * It lives in this file, not its own, because student pens on CodePen load
- * visualizer.js from the live site by URL (docs/workshop/codepen/head.html).
- * A second file would break every pen that does not also load it, and the
- * pens are exactly where the ceiling has to hold.
- *
- * WCAG 2.1 success criterion 2.3.1: no more than three flashes in any one
- * second. A flash is a pair of opposing changes in luminance, so three flashes
- * is six transitions. Viewers at a public installation did not opt in and
- * cannot easily look away, so the ceiling is not optional.
- *
- * Why it reads pixels instead of gating the beat. A limiter only bounds what
- * flows through it. Gating `beat` would miss every source that does not pass
- * through `beat` — an uploaded video that strobes by itself, a band level
- * swinging on a hi-hat, a mode added next year. The one place every source
- * passes through is the frame the viewer sees, so the guard measures that
- * frame and dims it before the browser presents it. It is a ceiling, not a
- * setting: nothing in the UI can raise it.
- *
- * Two rules, measured separately, as the spec asks:
- *   - General flash: mean relative luminance changes by 0.1 or more.
- *   - Red flash: the saturated-red measure changes by 20 or more. WCAG's
- *     definition: a pixel counts when R / (R + G + B) >= 0.8, and its value is
- *     (R - G - B) * 320, with channels in sRGB 0..1.
- *
- * Where it measures. WCAG counts a flash once it covers a quarter of the
- * central ten degrees of vision — 341 x 256 pixels on a 1024 x 768 screen, a
- * third of each dimension. A mean over the whole canvas dilutes a flash that
- * size: a patch a ninth of the screen can swing hard while the whole-screen
- * mean barely moves. So the guard measures overlapping regions a third of the
- * width by a third of the height, half a region apart, and every region keeps
- * its own count. A flash anywhere that size or larger lands mostly inside at
- * least one region. A whole-screen flash lands in all of them.
- *
- * How the cap works. Falls toward dark are always allowed — darkening is never
- * the risk. A rise that would complete a transition is allowed only while the
- * last second holds four transitions or fewer, so the rise and the fall that
- * must follow it still fit inside six. Otherwise the guard dims the frame so
- * that region stays just under the threshold above its last low point. The
- * veil covers the whole frame; dimming only the region would draw a visible
- * box. The music keeps playing; the screen holds a steady level until the
- * window has room again.
- */
-
-// sRGB channel (0..255) to linear light, as a lookup table. Relative luminance
-// is defined on linear light, and the conversion runs thousands of times a frame.
-const SRGB_TO_LINEAR = new Float32Array(256);
-for (let i = 0; i < 256; i++) {
-  const c = i / 255;
-  SRGB_TO_LINEAR[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-// Counts transitions in one measure and says how high the next frame may go.
-class TransitionCounter {
-  constructor(threshold) {
-    this.threshold = threshold;
-    this.rising = false; // false: tracking a low point; true: tracking a high point
-    this.low = null;
-    this.high = null;
-    this.times = [];
-  }
-
-  prune(now) {
-    while (this.times.length && this.times[0] <= now - FlashGuard.WINDOW_MS) this.times.shift();
-  }
-
-  count(now) {
-    this.prune(now);
-    return this.times.length;
-  }
-
-  // The highest value the next frame may show. Infinity when a rise is allowed.
-  ceiling(now) {
-    if (this.rising || this.low === null) return Infinity;
-    // A rise needs room for itself and for the fall that follows it.
-    if (this.count(now) <= FlashGuard.MAX_FLASHES * 2 - 2) return Infinity;
-    return this.low + this.threshold * FlashGuard.MARGIN;
-  }
-
-  observe(value, now) {
-    this.prune(now);
-    if (this.low === null) {
-      this.low = this.high = value;
-      return;
-    }
-    if (!this.rising) {
-      this.low = Math.min(this.low, value);
-      if (value - this.low >= this.threshold) {
-        this.times.push(now);
-        this.rising = true;
-        this.high = value;
-      }
-    } else {
-      this.high = Math.max(this.high, value);
-      if (this.high - value >= this.threshold) {
-        this.times.push(now);
-        this.rising = false;
-        this.low = value;
-      }
-    }
-  }
-}
-
-// One luminance counter and one red counter per region.
-class RegionCounters {
-  constructor(count) {
-    this.luminance = [];
-    this.red = [];
-    for (let i = 0; i < count; i++) {
-      this.luminance.push(new TransitionCounter(FlashGuard.LUMINANCE_THRESHOLD));
-      this.red.push(new TransitionCounter(FlashGuard.RED_THRESHOLD));
-    }
-  }
-
-  // Flashes in the worst region over the last second. Half a flash still
-  // counts against the ceiling, so five transitions read as three.
-  worst(counters, now) {
-    let most = 0;
-    for (const counter of counters) most = Math.max(most, counter.count(now));
-    return Math.ceil(most / 2);
-  }
-}
-
-class FlashGuard {
-  static WINDOW_MS = 1000;
-  static MAX_FLASHES = 3;
-  static LUMINANCE_THRESHOLD = 0.1;
-  static RED_THRESHOLD = 20;
-  // Hold a blocked frame at 80% of the threshold, not at it, so rounding in
-  // the blend and the sample never tips a held frame over into a transition.
-  static MARGIN = 0.8;
-  // The WCAG area, as a fraction of each dimension, and the step between
-  // neighbouring regions. Half a region apart means any patch that size
-  // overlaps some region by at least half its area.
-  static REGION = 1 / 3;
-  static STEP = 1 / 6;
-
-  constructor() {
-    this.layout = '';
-    this.regions = [];
-    this.counters = null;
-  }
-
-  // Overlapping rectangles, in grid cells, covering the whole grid edge to edge.
-  static regionsFor(cols, rows) {
-    const span = (size) => {
-      const length = Math.max(1, Math.round(size * FlashGuard.REGION));
-      const step = Math.max(1, Math.round(size * FlashGuard.STEP));
-      const count = Math.ceil((size - length) / step) + 1;
-      const starts = [];
-      for (let i = 0; i < count; i++) {
-        starts.push(count === 1 ? 0 : Math.round((i * (size - length)) / (count - 1)));
-      }
-      return { length, starts };
-    };
-    const across = span(cols);
-    const down = span(rows);
-    const regions = [];
-    for (const y of down.starts) {
-      for (const x of across.starts) regions.push({ x, y, w: across.length, h: down.length });
-    }
-    return regions;
-  }
-
-  // Mean relative luminance of one region, every channel scaled by `k`.
-  static luminanceOf(pixels, cols, region, k = 1) {
-    let sum = 0;
-    for (let y = region.y; y < region.y + region.h; y++) {
-      for (let i = (y * cols + region.x) * 4, end = i + region.w * 4; i < end; i += 4) {
-        sum +=
-          0.2126 * SRGB_TO_LINEAR[Math.round(pixels[i] * k)] +
-          0.7152 * SRGB_TO_LINEAR[Math.round(pixels[i + 1] * k)] +
-          0.0722 * SRGB_TO_LINEAR[Math.round(pixels[i + 2] * k)];
-      }
-    }
-    return sum / (region.w * region.h);
-  }
-
-  // Mean saturated-red measure of one region. Scaling every channel by `k`
-  // keeps R / (R + G + B) and scales R - G - B, so the veil scales this
-  // linearly and it never needs a search.
-  static redOf(pixels, cols, region) {
-    let sum = 0;
-    for (let y = region.y; y < region.y + region.h; y++) {
-      for (let i = (y * cols + region.x) * 4, end = i + region.w * 4; i < end; i += 4) {
-        const r = pixels[i],
-          g = pixels[i + 1],
-          b = pixels[i + 2];
-        const total = r + g + b;
-        if (total > 0 && r / total >= 0.8) sum += Math.max(0, ((r - g - b) / 255) * 320);
-      }
-    }
-    return sum / (region.w * region.h);
-  }
-
-  // A resize changes what a region covers, so its history no longer applies.
-  ensureLayout(cols, rows) {
-    const layout = `${cols}x${rows}`;
-    if (layout === this.layout) return;
-    this.layout = layout;
-    this.regions = FlashGuard.regionsFor(cols, rows);
-    this.counters = new RegionCounters(this.regions.length);
-  }
-
-  // Takes the frame as it would be shown and returns the brightness scale to
-  // apply to it: 1 leaves it alone, 0.4 dims every channel to 40%.
-  process(pixels, cols, rows, now) {
-    this.ensureLayout(cols, rows);
-    const { regions, counters } = this;
-    const raw = regions.map((region) => ({
-      luminance: FlashGuard.luminanceOf(pixels, cols, region),
-      red: FlashGuard.redOf(pixels, cols, region)
-    }));
-
-    let scale = 1;
-    regions.forEach((region, i) => {
-      const lumCeiling = counters.luminance[i].ceiling(now);
-      // Luminance is not linear in the channel values, so search for the
-      // brightest scale that keeps this region under its ceiling. Twelve
-      // halvings is finer than one 8-bit step. Skipped when the scale already
-      // chosen for another region is enough.
-      if (
-        raw[i].luminance > lumCeiling &&
-        FlashGuard.luminanceOf(pixels, cols, region, scale) > lumCeiling
-      ) {
-        let lo = 0,
-          hi = scale;
-        for (let step = 0; step < 12; step++) {
-          const mid = (lo + hi) / 2;
-          if (FlashGuard.luminanceOf(pixels, cols, region, mid) <= lumCeiling) lo = mid;
-          else hi = mid;
-        }
-        scale = lo;
-      }
-      const redCeiling = counters.red[i].ceiling(now);
-      if (raw[i].red > redCeiling) scale = Math.min(scale, redCeiling / raw[i].red);
-    });
-
-    const shown = regions.map((region, i) => ({
-      luminance:
-        scale === 1 ? raw[i].luminance : FlashGuard.luminanceOf(pixels, cols, region, scale),
-      red: raw[i].red * scale
-    }));
-    shown.forEach((value, i) => {
-      counters.luminance[i].observe(value.luminance, now);
-      counters.red[i].observe(value.red, now);
-    });
-
-    return { scale, raw, shown };
-  }
-}
-
-/* Flash meter — counts what was actually shown. Measurement only; it never
- * changes a frame. It reads the canvas a second time, after the veil, so it
- * checks the guard instead of trusting the guard's own arithmetic. Load the
- * app with ?flashlog to turn it on. */
-class FlashMeter {
-  constructor() {
-    this.layout = '';
-    this.worst = { flashes: 0, redFlashes: 0, rawFlashes: 0, rawRedFlashes: 0 };
-    this.frames = 0;
-    this.veiledFrames = 0;
-    // The last second only, for the log: frame rate and the guard's own cost.
-    this.second = { frames: 0, veiledFrames: 0, guardMs: 0 };
-  }
-
-  // Raw values come from the guard: what the modes asked for, before the veil.
-  observe(shownPixels, cols, rows, guardResult, now, guardMs) {
-    const layout = `${cols}x${rows}`;
-    if (layout !== this.layout) {
-      this.layout = layout;
-      this.regions = FlashGuard.regionsFor(cols, rows);
-      this.shown = new RegionCounters(this.regions.length);
-      this.raw = new RegionCounters(this.regions.length);
-    }
-    this.frames++;
-    this.second.frames++;
-    this.second.guardMs += guardMs;
-    if (guardResult.scale < 1) {
-      this.veiledFrames++;
-      this.second.veiledFrames++;
-    }
-
-    this.regions.forEach((region, i) => {
-      this.shown.luminance[i].observe(FlashGuard.luminanceOf(shownPixels, cols, region), now);
-      this.shown.red[i].observe(FlashGuard.redOf(shownPixels, cols, region), now);
-      this.raw.luminance[i].observe(guardResult.raw[i].luminance, now);
-      this.raw.red[i].observe(guardResult.raw[i].red, now);
-    });
-
-    const w = this.worst;
-    w.flashes = Math.max(w.flashes, this.shown.worst(this.shown.luminance, now));
-    w.redFlashes = Math.max(w.redFlashes, this.shown.worst(this.shown.red, now));
-    w.rawFlashes = Math.max(w.rawFlashes, this.raw.worst(this.raw.luminance, now));
-    w.rawRedFlashes = Math.max(w.rawRedFlashes, this.raw.worst(this.raw.red, now));
-  }
-}
+import { BANDS } from './audioProcessor.js';
+import { FlashGuard, FlashMeter } from './flashGuard.js';
+import { MODES } from './modes/index.js';
 
 class DJVisualizer {
   constructor() {
@@ -337,8 +42,15 @@ class DJVisualizer {
     this.vh = 0;
     this.railH = 0;
 
-    this.currentMode = 'spectrum';
-    this.particles = [];
+    // The registry, by id. Each mode is a file in app/modes/; the visualizer
+    // only knows the contract written in app/modes/index.js. PHI-163.
+    this.modes = new Map(MODES.map((mode) => [mode.id, mode]));
+    this.currentMode = MODES[0].id;
+    // The active mode's own state, from its setup(), and the mode it belongs
+    // to. Rebuilt lazily on the next frame whenever this.memoryFor is cleared,
+    // which also covers callers that set currentMode directly.
+    this.memory = null;
+    this.memoryFor = null;
     this.time = 0;
     this.isRunning = false;
 
@@ -373,22 +85,42 @@ class DJVisualizer {
     this.customMediaType = null; // 'image' | 'video'
     this.customMediaURL = null;
 
-    // Spectrum mode state. Bars are log-spaced across the audible range and
-    // peak-hold marks ride above them, the way a mixer's meter does.
-    this.spectrumPeaks = [];
-
-    // Polygon Collage accumulates rather than clearing, so it gets its own 2D
-    // canvas layered beneath the WEBGL one. Accumulating in the WEBGL
-    // framebuffer would fight its per-frame clear, and compositing a 2D buffer
-    // through p5's image() meant re-uploading a full-screen texture to the GPU
-    // sixty times a second — for paint that changes a few times a bar.
+    // A mode with clearsBackground: false (Polygon Collage) accumulates rather
+    // than clearing, so it gets its own 2D canvas layered beneath the WEBGL
+    // one. Accumulating in the WEBGL framebuffer would fight its per-frame
+    // clear, and compositing a 2D buffer through p5's image() meant
+    // re-uploading a full-screen texture to the GPU sixty times a second — for
+    // paint that changes a few times a bar.
     this.collageCanvas = null;
     this.collageCtx = null;
-    this.collageFrames = 0;
+    this.collageLayer = null;
 
     // Filled from the CSS band tokens at init. Declared here only so the shape
     // is visible; the values are never hard-coded.
     this.colors = { bass: [255, 255, 255], mid: [255, 255, 255], high: [255, 255, 255] };
+
+    // Everything a mode may read, and nothing else. The fields are copied in
+    // once a frame by refreshStage(), into this one object, so a frame
+    // allocates nothing. The contract is documented in app/modes/index.js.
+    this.stage = {
+      colors: this.colors,
+      band: (name) => this.band(name),
+      level: (value) => this.level(value),
+      bandAt: (hz) => this.bandAt(hz),
+      idle: 0,
+      audio: this.audioData,
+      beat: 0,
+      phase: 0,
+      beatPeriod: 0.5,
+      time: 0,
+      w: 0,
+      h: 0,
+      vw: 0,
+      vh: 0,
+      railH: 0,
+      layer: null,
+      media: null
+    };
   }
 
   /* ---------------------------------------------------------------- setup */
@@ -406,9 +138,9 @@ class DJVisualizer {
       const previousMode = this.currentMode;
       this.currentMode = e.target.value;
 
-      // Custom media controls only exist when they can be used.
+      // Upload controls only exist when the mode can use them.
       const mediaSection = document.getElementById('customMediaSection');
-      if (mediaSection) mediaSection.hidden = this.currentMode !== 'custom';
+      if (mediaSection) mediaSection.hidden = !this.activeMode().usesMedia;
 
       this.onModeChange(previousMode);
     });
@@ -431,7 +163,7 @@ class DJVisualizer {
         canvas.parent('p5-canvas');
         p.frameRate(60);
         p.noStroke();
-        this.initializeParticles();
+        this.memoryFor = null;
         this.resetCollage();
       };
 
@@ -439,7 +171,8 @@ class DJVisualizer {
         this.measureStage();
         p.pixelDensity(this.computeDensity(p));
         p.resizeCanvas(this.w, this.h);
-        this.initializeParticles();
+        // Mode state is laid out for the old size, so the next frame rebuilds it.
+        this.memoryFor = null;
         this.resetCollage();
       };
 
@@ -508,33 +241,21 @@ class DJVisualizer {
     this.applySafeArea();
   }
 
-  onModeChange(previousMode) {
-    this.initializeParticles();
-    this.spectrumPeaks = [];
-    this.resetCollage();
-
-    // Pause/resume uploaded video when leaving/entering custom mode
-    if (this.customMediaType === 'video' && this.customMedia) {
-      if (this.currentMode === 'custom') this.customMedia.loop();
-      else if (previousMode === 'custom') this.customMedia.pause();
-    }
+  // The mode that draws. An id with no mode behind it falls back to Floating
+  // Particles, as the old switch statement's default did, so a bad value can
+  // never leave the stage with nothing to draw.
+  activeMode() {
+    return this.modes.get(this.currentMode) || this.modes.get('particles') || MODES[0];
   }
 
-  initializeParticles() {
-    // Fewer than before, and deliberately. Reduction is the direction: a field
-    // that breathes reads as composed, a field that fills reads as noise.
-    this.particles = [];
-    for (let i = 0; i < 36; i++) {
-      this.particles.push({
-        x: (Math.random() - 0.5) * this.vw,
-        y: (Math.random() - 0.5) * this.vh,
-        z: (Math.random() - 0.5) * 600,
-        vx: (Math.random() - 0.5) * 0.35,
-        vy: (Math.random() - 0.5) * 0.35,
-        vz: (Math.random() - 0.5) * 0.5,
-        seed: Math.random() * Math.PI * 2,
-        size: Math.random() * 3 + 2
-      });
+  onModeChange(previousMode) {
+    this.memoryFor = null;
+    this.resetCollage();
+
+    // An uploaded video plays only while a mode that shows it is up.
+    if (this.customMediaType === 'video' && this.customMedia) {
+      if (this.activeMode().usesMedia) this.customMedia.loop();
+      else if (this.modes.get(previousMode)?.usesMedia) this.customMedia.pause();
     }
   }
 
@@ -543,10 +264,12 @@ class DJVisualizer {
     const canvas = document.createElement('canvas');
     canvas.id = 'collage-canvas';
     const stage = document.querySelector('.stage');
-    // Behind the WEBGL canvas, which runs transparent while this mode is up.
+    // Behind the WEBGL canvas, which runs transparent while a layered mode is up.
     stage.insertBefore(canvas, stage.firstChild);
     this.collageCanvas = canvas;
     this.collageCtx = canvas.getContext('2d');
+    // What a clearsBackground: false mode receives as stage.layer.
+    this.collageLayer = { canvas, ctx: this.collageCtx };
   }
 
   resetCollage() {
@@ -557,7 +280,6 @@ class DJVisualizer {
     // both a resize and a mode switch — stale paint must not survive either.
     this.collageCanvas.width = w;
     this.collageCanvas.height = h;
-    this.collageFrames = 0;
   }
 
   setCollageVisible(visible) {
@@ -678,64 +400,30 @@ class DJVisualizer {
     else gl.disable(gl.DEPTH_TEST);
   }
 
-  // The whole art direction in one function. Three passes — wide and faint,
-  // then middle, then tight and bright — turn a 2px stroke into something with
-  // a core and a halo. It is the cheapest thing that reads as light instead of
-  // ink, and it needs no shader, which the zero-build constraint forbids.
-  static GLOW = [
-    [4.0, 0.1],
-    [2.1, 0.22],
-    [1.0, 1.0]
-  ];
-
-  emissiveStroke(p, rgb, alpha, weight, shape) {
-    p.noFill();
-    for (const [ws, as] of DJVisualizer.GLOW) {
-      p.stroke(rgb[0], rgb[1], rgb[2], alpha * as);
-      p.strokeWeight(Math.max(0.4, weight * ws));
-      shape();
-    }
-  }
-
-  /* A rounded rect that p5 can draw from its geometry cache.
-   *
-   * p5 1.9's WEBGL renderer tessellates a rect with a corner radius from
-   * scratch on every call. Spectrum Bars drew 264 of them a frame, which took
-   * 29 ms and held the mode at 27 FPS on an M1 Max. Plain rects and fixed-angle
-   * arcs are built once and reused, so the same shape is assembled from three
-   * rects and four quarter discs. The parts meet edge to edge and never overlap,
-   * because under additive blending an overlap would draw a bright seam. PHI-266.
-   */
-  roundedRect(p, x, y, w, h, radius) {
-    const r = Math.min(radius, w / 2, h / 2);
-    if (r <= 0) {
-      p.rect(x, y, w, h);
-      return;
-    }
-    const d = r * 2;
-    const right = x + w - r;
-    const bottom = y + h - r;
-
-    if (w > d) p.rect(x + r, y, w - d, h);
-    if (h > d) {
-      p.rect(x, y + r, r, h - d);
-      p.rect(right, y + r, r, h - d);
-    }
-    p.arc(x + r, y + r, d, d, Math.PI, Math.PI * 1.5, p.PIE);
-    p.arc(right, y + r, d, d, Math.PI * 1.5, Math.PI * 2, p.PIE);
-    p.arc(right, bottom, d, d, 0, Math.PI / 2, p.PIE);
-    p.arc(x + r, bottom, d, d, Math.PI / 2, Math.PI, p.PIE);
-  }
-
-  emissiveDot(p, rgb, alpha, diameter, x = 0, y = 0) {
-    p.noStroke();
-    for (const [ws, as] of DJVisualizer.GLOW) {
-      p.fill(rgb[0], rgb[1], rgb[2], alpha * as);
-      p.circle(x, y, Math.max(0.5, diameter * ws));
-    }
-  }
+  // The drawing helpers modes use (GLOW, emissiveStroke, emissiveDot,
+  // roundedRect) live in app/paint.js, so a mode imports them directly.
 
   /* ------------------------------------------------------------------ loop */
+
+  // Copies what modes may read into the one shared stage object. Fields, not
+  // getters: a getter onto the visualizer would hand modes everything again.
+  refreshStage(mode) {
+    const stage = this.stage;
+    stage.colors = this.colors;
+    stage.audio = this.audioData;
+    stage.idle = this.idle;
+    stage.beat = this.beat;
+    stage.phase = this.phase;
+    stage.beatPeriod = this.beatPeriod;
+    stage.time = this.time;
+    stage.w = this.w;
+    stage.h = this.h;
+    stage.vw = this.vw;
+    stage.vh = this.vh;
+    stage.railH = this.railH;
+    stage.layer = mode.clearsBackground === false ? this.collageLayer : null;
+    stage.media = mode.usesMedia ? this.customMedia : null;
+  }
 
   draw(p) {
     const dt = Math.min(0.1, (p.deltaTime || 16.7) / 1000);
@@ -754,60 +442,34 @@ class DJVisualizer {
 
     this.updateFrequencyDisplay();
 
-    const collaging = this.currentMode === 'polygons';
-    this.setCollageVisible(collaging && this.isRunning);
+    const mode = this.activeMode();
+    const layered = mode.clearsBackground === false;
+    this.setCollageVisible(layered && this.isRunning);
 
     p.clear();
-    // Polygon Collage paints into the layer underneath, so the WEBGL canvas has
-    // to stay transparent for it to be visible at all.
-    if (!collaging) p.background(0);
+    // A layered mode paints into the 2D canvas underneath, so the WEBGL canvas
+    // has to stay transparent for it to be visible at all.
+    if (!layered) p.background(0);
 
     if (!this.isRunning) return;
+
+    this.refreshStage(mode);
+    if (this.memoryFor !== mode) {
+      this.memory = mode.setup ? mode.setup(this.stage) : {};
+      this.memoryFor = mode;
+    }
 
     this.setDepthTest(p, false);
     p.push();
     // Centre the composition in the space above the rail.
     p.translate(0, -this.railH / 2);
 
-    // Custom media is a photograph, not a light source; additive blending would
-    // blow it out. Every other mode is emissive and wants light to accumulate.
-    const additive = this.currentMode !== 'custom';
+    // Emissive modes want light to accumulate. A mode that shows a photograph
+    // opts out with additive: false; additive blending would blow it out.
+    const additive = mode.additive !== false;
     if (additive) p.blendMode(p.ADD);
 
-    switch (this.currentMode) {
-      case 'spectrum':
-        this.drawSpectrum(p);
-        break;
-      case 'particles':
-        this.drawParticleField(p);
-        break;
-      case 'rings':
-        this.drawFrequencyRings(p);
-        break;
-      case 'waves':
-        this.drawWaveforms(p);
-        break;
-      case 'mandala':
-        this.drawMandala(p);
-        break;
-      case 'tunnel':
-        this.drawTunnel(p);
-        break;
-      case 'galaxy':
-        this.drawGalaxy(p);
-        break;
-      case 'flow':
-        this.drawFlow(p);
-        break;
-      case 'polygons':
-        this.drawPolygonCollage();
-        break;
-      case 'custom':
-        this.drawCustomMedia(p);
-        break;
-      default:
-        this.drawParticleField(p);
-    }
+    mode.draw(p, this.stage, this.memory);
 
     if (additive) p.blendMode(p.BLEND);
     p.pop();
@@ -936,664 +598,16 @@ class DJVisualizer {
     if (this.highFill) this.highFill.style.width = pct(this.audioData.high);
   }
 
-  /* ------------------------------------------------------------- the modes */
+  /* ------------------------------------------------------- shared with modes */
 
   // Which band owns a given frequency. Shared with the analyser's BANDS table
   // so the stage and the rail can never disagree about where mid ends — the
   // failure DESIGN.md calls out explicitly.
   bandAt(hz) {
-    if (typeof BANDS === 'undefined') return 'mid';
     for (const band of BANDS) {
       if (hz >= band.from && hz < band.to) return band.name;
     }
     return hz < 20 ? 'bass' : 'high';
-  }
-
-  /* Spectrum Bars — the instrument.
-   *
-   * Log-spaced across the audible range, because linear bins spend four fifths
-   * of the screen width above 4 kHz where almost nothing happens, and squash
-   * every kick and vocal into the leftmost inch. Peak-hold marks ride above the
-   * bars: it is what a real mixer meter has, and it is the detail that makes
-   * the mode read as an instrument rather than a decoration. Closes PHI-154 —
-   * this used to be 256 DOM nodes restyled sixty times a second. */
-  drawSpectrum(p) {
-    const spec = this.audioData.spectrum;
-    const binHz = this.audioData.binHz;
-    if (!spec || spec.length === 0 || !binHz) return;
-
-    const COUNT = 88;
-    const F_MIN = 20,
-      F_MAX = 20000;
-    const ratio = Math.pow(F_MAX / F_MIN, 1 / COUNT);
-
-    const width = this.vw * 0.9;
-    const left = -width / 2;
-    const slot = width / COUNT;
-    const barW = slot * 0.62;
-    const floorY = this.vh / 2 - this.vh * 0.06;
-    const maxH = this.vh * 0.74;
-
-    if (this.spectrumPeaks.length !== COUNT) this.spectrumPeaks = new Array(COUNT).fill(0);
-
-    for (let i = 0; i < COUNT; i++) {
-      const fLow = F_MIN * Math.pow(ratio, i);
-      const fHigh = F_MIN * Math.pow(ratio, i + 1);
-
-      const first = Math.max(1, Math.round(fLow / binHz));
-      const last = Math.min(spec.length - 1, Math.max(first, Math.round(fHigh / binHz)));
-
-      // Peak, not mean, across the bar's bins. At the low end a bar covers one
-      // bin and at the top it covers dozens; averaging would flatten the highs
-      // into nothing purely as an artefact of the spacing.
-      let value = 0;
-      for (let b = first; b <= last; b++) value = Math.max(value, spec[b] || 0);
-
-      const lit = Math.max(this.level(value), this.idle * 0.6);
-      const rgb = this.colors[this.bandAt((fLow + fHigh) / 2)];
-      const x = left + i * slot + slot / 2;
-      const barH = Math.max(2, lit * maxH);
-
-      // Peak hold falls under gravity rather than tracking the signal down.
-      this.spectrumPeaks[i] = Math.max(this.spectrumPeaks[i] - 0.5 * (1 / 60), lit);
-
-      p.push();
-      p.translate(x, floorY - barH / 2);
-      p.noStroke();
-      for (const [ws, as] of DJVisualizer.GLOW) {
-        p.fill(rgb[0], rgb[1], rgb[2], (70 + lit * 170) * as);
-        this.roundedRect(p, (-barW * ws) / 2, -barH / 2, barW * ws, barH, barW / 2);
-      }
-      p.pop();
-
-      const peakY = floorY - Math.max(2, this.spectrumPeaks[i] * maxH);
-      p.noStroke();
-      p.fill(255, 255, 255, 120 + this.spectrumPeaks[i] * 100);
-      p.rect(x - barW / 2, peakY - 1, barW, 2);
-    }
-  }
-
-  /* Floating Particles — the room's dust.
-   *
-   * Depth carries the band: bass sits far and heavy, highs sit near and quick.
-   * Sorted back to front so the additive halos layer correctly, and billboarded
-   * circles rather than lit spheres — 36 spheres was two thousand quads a frame
-   * for a shape the camera can only ever see as a disc. */
-  drawParticleField(p) {
-    const bass = this.band('bass'),
-      mid = this.band('mid'),
-      high = this.band('high');
-    const drift = 0.4 + this.beat * 0.8;
-
-    for (const particle of this.particles) {
-      particle.x += particle.vx * (1 + bass * 6) * drift;
-      particle.y += particle.vy * (1 + mid * 5) * drift;
-      particle.z += particle.vz * (1 + high * 7) * drift;
-
-      const halfW = this.vw / 2,
-        halfH = this.vh / 2;
-      if (particle.x > halfW) particle.x = -halfW;
-      if (particle.x < -halfW) particle.x = halfW;
-      if (particle.y > halfH) particle.y = -halfH;
-      if (particle.y < -halfH) particle.y = halfH;
-      if (particle.z > 300) particle.z = -300;
-      if (particle.z < -300) particle.z = 300;
-    }
-
-    const ordered = [...this.particles].sort((a, b) => a.z - b.z);
-    const total = ordered.length;
-
-    ordered.forEach((particle, index) => {
-      const third = index / total;
-      const name = third < 0.34 ? 'bass' : third < 0.67 ? 'mid' : 'high';
-      const lit = name === 'bass' ? bass : name === 'mid' ? mid : high;
-
-      // Near particles are brighter and larger. Cheap depth cueing, and it is
-      // what stops the field reading as a flat scatter of dots.
-      const depth = (particle.z + 300) / 600;
-      const alpha = (40 + lit * 190) * (0.35 + depth * 0.65);
-      const size = (particle.size + lit * 26) * (0.5 + depth * 0.9);
-
-      p.push();
-      p.translate(particle.x, particle.y, particle.z);
-      this.emissiveDot(p, this.colors[name], alpha, size);
-      p.pop();
-    });
-  }
-
-  /* Frequency Rings — the concentric readout.
-   *
-   * Three nested groups, one per band, inner to outer in frequency order so the
-   * figure reads bass at the core and air at the edge. Three rings per band
-   * instead of twelve undifferentiated ones: the point is legibility of state,
-   * which is the craft bar's whole demand. */
-  drawFrequencyRings(p) {
-    const bands = ['bass', 'mid', 'high'];
-    const base = Math.min(this.vw, this.vh) * 0.11;
-
-    bands.forEach((name, group) => {
-      const lit = this.band(name);
-      const rgb = this.colors[name];
-
-      for (let i = 0; i < 3; i++) {
-        const index = group * 3 + i;
-        // Rings breathe out of phase with each other so the figure never reads
-        // as one solid disc pumping.
-        const offset = Math.sin(this.phase * Math.PI * 2 - index * 0.4) * lit * base * 0.55;
-        const radius = base * (1.1 + index * 0.72) + lit * base * 1.5 + offset;
-        const alpha = (55 + lit * 175) * (1 - index * 0.06);
-
-        p.push();
-        // A slow tilt gives the rings a body. Tied to beat phase, so it turns
-        // with the track rather than at an arbitrary rate.
-        p.rotateX(Math.sin(this.time * 0.25 + group) * 0.35);
-        p.rotateZ(this.phase * Math.PI * 0.5 + group * 0.6);
-        this.emissiveStroke(p, rgb, alpha, 1.4 + lit * 3.2, () => p.circle(0, 0, radius * 2));
-        p.pop();
-      }
-    });
-  }
-
-  /* Wave Forms — three bands as three waveforms.
-   *
-   * The shape is read out of the band's own spectrum slice rather than from a
-   * sine wave, so what is on screen is the sound and not an animation timed to
-   * arrive alongside it. Bass sits low and slow, highs sit high and fine. */
-  drawWaveforms(p) {
-    const spec = this.audioData.spectrum;
-    const binHz = this.audioData.binHz;
-    const layout = [
-      { name: 'bass', y: this.vh * 0.24, step: 14, wobble: 0.9 },
-      { name: 'mid', y: 0, step: 9, wobble: 1.6 },
-      { name: 'high', y: -this.vh * 0.24, step: 6, wobble: 2.6 }
-    ];
-
-    for (const row of layout) {
-      const lit = this.band(row.name);
-      const rgb = this.colors[row.name];
-      const amp = lit * this.vh * 0.2;
-      const bounds =
-        (typeof BANDS !== 'undefined' && BANDS.find((b) => b.name === row.name)) || null;
-
-      let first = 1,
-        last = 1;
-      if (bounds && binHz && spec && spec.length) {
-        first = Math.max(1, Math.round(bounds.from / binHz));
-        last = Math.min(spec.length - 1, Math.round(bounds.to / binHz));
-      }
-      const span = Math.max(1, last - first);
-
-      this.emissiveStroke(p, rgb, 70 + lit * 165, 1.6 + lit * 2.6, () => {
-        p.beginShape();
-        for (let x = -this.vw / 2; x <= this.vw / 2; x += row.step) {
-          const t = (x + this.vw / 2) / this.vw;
-
-          // The band's own bins drive the shape; the travelling term only moves
-          // it, and its amplitude is a fraction of the signal's, never a
-          // substitute for it.
-          let detail = 0;
-          if (spec && spec.length) {
-            const bin = first + Math.floor(t * span);
-            detail = ((spec[bin] || 0) - 0.5) * 2;
-          }
-          const travel = Math.sin(t * Math.PI * 2 * row.wobble + this.phase * Math.PI * 2);
-          p.vertex(x, row.y + detail * amp + travel * amp * 0.35);
-        }
-        p.endShape();
-      });
-    }
-  }
-
-  /* Mandala — radial symmetry, struck on the beat.
-   *
-   * Spoke count comes from the band's energy, so the figure gains and loses
-   * structure with the music rather than spinning at a constant density. The
-   * rotation is beat-phase driven: it completes a turn per bar, not per
-   * arbitrary interval. */
-  drawMandala(p) {
-    const bands = ['bass', 'mid', 'high'];
-    const radius = Math.min(this.vw, this.vh) * 0.42;
-
-    p.push();
-    p.rotateZ(this.phase * Math.PI * 0.5);
-
-    bands.forEach((name, ring) => {
-      const lit = this.band(name);
-      const rgb = this.colors[name];
-      const spokes = 6 + Math.round(lit * 18);
-      const inner = radius * (0.16 + ring * 0.24);
-      const outer = inner + radius * (0.2 + lit * 0.42);
-      const alpha = 60 + lit * 170;
-
-      p.push();
-      // Alternating direction keeps the three rings from fusing into one wheel.
-      p.rotateZ((ring % 2 ? -1 : 1) * (this.time * 0.12 + ring));
-
-      for (let i = 0; i < spokes; i++) {
-        p.push();
-        p.rotateZ((i / spokes) * Math.PI * 2);
-        // Struck spokes: every fourth one extends on the beat, which gives the
-        // figure an accent instead of a uniform pulse.
-        const struck = i % 4 === 0 ? this.beat * radius * 0.18 : 0;
-        this.emissiveStroke(p, rgb, alpha, 1.2 + lit * 2.4, () =>
-          p.line(inner, 0, outer + struck, 0)
-        );
-        p.pop();
-      }
-      p.pop();
-    });
-
-    p.pop();
-  }
-
-  /* Tunnel Vision — travel at tempo.
-   *
-   * The rings advance by beat phase, so the tunnel moves a fixed distance per
-   * beat and the travel locks to the track. Colour is by depth in frequency
-   * order, near to far, so the tunnel is a spectrum you fly through. */
-  drawTunnel(p) {
-    const RINGS = 18;
-    const SPACING = 90;
-    const bands = ['bass', 'mid', 'high'];
-    const advance = ((this.phase + this.time * 0.05) % 1) * SPACING;
-
-    for (let i = RINGS - 1; i >= 0; i--) {
-      const depth = i / RINGS;
-      const name = bands[Math.min(2, Math.floor(depth * 3))];
-      const lit = this.band(name);
-      const rgb = this.colors[name];
-
-      const z = -i * SPACING + advance;
-      // Fade the far end out rather than letting rings pop in at the horizon.
-      const fade = 1 - depth * 0.75;
-      const alpha = (35 + lit * 175) * fade;
-      const radius = Math.min(this.vw, this.vh) * (0.16 + lit * 0.14);
-
-      p.push();
-      p.translate(0, 0, z);
-      p.rotateZ(depth * 0.5 + this.time * 0.08);
-      this.emissiveStroke(p, rgb, alpha, 1.4 + lit * 3.4, () => p.circle(0, 0, radius * 2));
-      p.pop();
-    }
-  }
-
-  /* Galaxy — spiral arms brightening by band.
-   *
-   * Radius carries frequency: bass at the core, air at the rim. The arms turn
-   * on beat phase, and each point's brightness is its band's level, so a bass
-   * drop lights the centre and a hi-hat pattern lights the edge. */
-  drawGalaxy(p) {
-    const ARMS = 3;
-    const POINTS = 42;
-    const bands = ['bass', 'mid', 'high'];
-    const reach = Math.min(this.vw, this.vh) * 0.44;
-
-    for (let arm = 0; arm < ARMS; arm++) {
-      p.push();
-      p.rotateZ(this.phase * Math.PI * 0.35 + (arm / ARMS) * Math.PI * 2);
-
-      for (let i = 0; i < POINTS; i++) {
-        const t = i / POINTS;
-        const name = bands[Math.min(2, Math.floor(t * 3))];
-        const lit = this.band(name);
-        const rgb = this.colors[name];
-
-        const angle = t * Math.PI * 2.4;
-        const radius = t * reach * (1 + lit * 0.22);
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-
-        // The arm thins as it reaches out, the way a real one does.
-        const alpha = (45 + lit * 190) * (1 - t * 0.45);
-        const size = (2.5 + lit * 14) * (1 - t * 0.4);
-
-        p.push();
-        p.translate(x, y, 0);
-        this.emissiveDot(p, rgb, alpha, size);
-        p.pop();
-      }
-      p.pop();
-    }
-
-    // A core that answers the kick. One element carrying the whole low end is
-    // the composition's anchor; without it the spiral has no centre of gravity.
-    const core = this.band('bass');
-    this.emissiveDot(
-      p,
-      this.colors.bass,
-      70 + core * 150 + this.beat * 40,
-      reach * (0.06 + core * 0.09)
-    );
-  }
-
-  /* Flow — the three bands as one weather system.
-   *
-   * Salvaged rather than written. This was a finished mode stranded behind
-   * `drawSnakeGame`, an entry point nothing called, and it was very nearly
-   * deleted with the snake remnants around it. Three layers that read as one
-   * field: streams travelling across the frame, a ring of connected nodes, and
-   * stacked waves underneath.
-   *
-   * Restored into the grammar rather than pasted back — the original used
-   * hard-coded alpha ramps, flat 2px strokes, lit spheres, and `sin(time)`
-   * fallbacks, none of which the other nine modes are allowed. What survives is
-   * its composition, which was the part worth keeping.
-   */
-  drawFlow(p) {
-    const bands = ['bass', 'mid', 'high'];
-    const levels = { bass: this.band('bass'), mid: this.band('mid'), high: this.band('high') };
-
-    this.drawFlowStreams(p, bands, levels);
-    this.drawFlowNodes(p, bands, levels);
-    this.drawFlowWaves(p, bands, levels);
-  }
-
-  // Streams travelling across the frame, one set per band, each band crossing
-  // on its own diagonal so the three read as separate currents in one system.
-  drawFlowStreams(p, bands, levels) {
-    const STREAMS = 3;
-    const STEPS = 48;
-    const paths = {
-      bass: { from: this.vh * 0.22, to: -this.vh * 0.22, reverse: false, sway: 0.42 },
-      mid: { from: 0, to: 0, reverse: false, sway: 0.5 },
-      high: { from: -this.vh * 0.22, to: this.vh * 0.22, reverse: true, sway: 0.34 }
-    };
-
-    for (let stream = 0; stream < STREAMS; stream++) {
-      const offset = (stream / STREAMS) * Math.PI * 2;
-
-      for (const name of bands) {
-        const lit = levels[name];
-        const path = paths[name];
-        // One full sway per beat, on the beat clock. A whole cycle per beat
-        // means no visible jump when phase wraps from 1 back to 0.
-        const drift = this.phase * Math.PI * 2 + offset;
-
-        this.emissiveStroke(p, this.colors[name], 60 + lit * 165, 1.3 + lit * 2.2, () => {
-          p.beginShape();
-          for (let i = 0; i <= STEPS; i++) {
-            const t = i / STEPS;
-            const along = path.reverse ? 1 - t : t;
-            const x = (along - 0.5) * this.vw + Math.sin(drift + t * 5) * lit * this.vw * 0.05;
-            const y =
-              path.from +
-              (path.to - path.from) * t +
-              Math.cos(drift + t * 4) * lit * this.vh * path.sway * 0.2;
-            p.vertex(x, y);
-          }
-          p.endShape();
-        });
-      }
-    }
-  }
-
-  // A ring of nodes, thirds coloured by band, each linked to its neighbours
-  // while its band is carrying energy. The links are the point: they are what
-  // makes three separate readings look like one connected system.
-  drawFlowNodes(p, bands, levels) {
-    const NODES = 12;
-    const radius = Math.min(this.vw, this.vh) * 0.3;
-    const spin = this.phase * Math.PI * 0.5;
-
-    for (let i = 0; i < NODES; i++) {
-      const name = bands[Math.min(2, Math.floor((i / NODES) * 3))];
-      const lit = levels[name];
-      const rgb = this.colors[name];
-
-      const angle = (i / NODES) * Math.PI * 2 + spin;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-
-      // Links first, so the nodes sit on top of their own connections.
-      if (lit > 0.08) {
-        const next = (i + 1) % NODES;
-        const nextAngle = (next / NODES) * Math.PI * 2 + spin;
-        this.emissiveStroke(p, rgb, 40 + lit * 110, 0.8 + lit * 2, () => {
-          p.line(x, y, Math.cos(nextAngle) * radius, Math.sin(nextAngle) * radius);
-        });
-      }
-
-      p.push();
-      p.translate(x, y, 0);
-      this.emissiveDot(p, rgb, 70 + lit * 170, 5 + lit * 20 + this.beat * 5);
-      p.pop();
-    }
-  }
-
-  // Stacked waves under the ring. Two layers rather than the original three:
-  // the emissive passes trebled the line count, and the field reads better with
-  // room to breathe than it did filled.
-  drawFlowWaves(p, bands, levels) {
-    const POINTS = 40;
-    const rows = { bass: this.vh * 0.3, mid: this.vh * 0.02, high: -this.vh * 0.3 };
-
-    // One full cycle per beat, on the beat clock, so there is no jump when
-    // phase wraps. The two terms travel in opposite directions: the original
-    // gave them different wall-clock speeds, and the interference between
-    // them is what makes the line look like water rather than a sliding sine.
-    const beat = this.phase * Math.PI * 2;
-
-    for (let layer = 0; layer < 2; layer++) {
-      const layerOffset = layer * 0.4;
-
-      for (const name of bands) {
-        const lit = levels[name];
-        const baseY = rows[name] - layer * this.vh * 0.035;
-        const amp = lit * this.vh * 0.11;
-
-        this.emissiveStroke(
-          p,
-          this.colors[name],
-          (45 + lit * 120) * (1 - layer * 0.3),
-          1.1 + lit * 1.6,
-          () => {
-            p.beginShape();
-            for (let i = 0; i < POINTS; i++) {
-              const x = (i / (POINTS - 1) - 0.5) * this.vw;
-              const wave = Math.sin(i * 0.25 + beat + layerOffset) * amp;
-              const flow = Math.cos(i * 0.18 - beat) * amp * 0.35;
-              p.vertex(x, baseY + wave + flow);
-            }
-            p.endShape();
-          }
-        );
-      }
-    }
-  }
-
-  /* Polygon Collage — the set accumulating into one image.
-   *
-   * Paint lands and stays, so by the end of a track the screen is a record of
-   * what was played. It draws into its own 2D buffer: accumulating in the
-   * WEBGL framebuffer meant paint survived a mode switch and reappeared under
-   * the next mode. The buffer also fades, very slowly — without it a long set
-   * turns the screen to mud, which is the failure mode of every collage.
-   *
-   * Colour is strictly the three band tokens and blends between them. The
-   * previous version reached for pure red, green, blue, yellow, cyan, magenta
-   * and white, which broke the palette contract on the one mode the demo ends
-   * on. */
-  drawPolygonCollage() {
-    this.ensureCollage();
-    const ctx = this.collageCtx;
-    const width = this.collageCanvas.width;
-    // Paint stays clear of the rail like every other mode's composition does.
-    const height = this.collageCanvas.height - this.railH;
-
-    const bass = this.band('bass'),
-      mid = this.band('mid'),
-      high = this.band('high');
-    if (bass + mid + high <= 0.06) return;
-
-    // Sample at a musical rate rather than a frame count, so a faster track
-    // fills the canvas faster.
-    this.collageFrames++;
-    const interval = Math.max(2, Math.round(8 * (this.beatPeriod / 0.5)));
-    if (this.collageFrames < interval) return;
-    this.collageFrames = 0;
-
-    // Very slow fade. Enough to keep a two-hour set legible, slight enough that
-    // within a track it still reads as pure accumulation — the mode's identity.
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.018)';
-    ctx.fillRect(0, 0, width, this.collageCanvas.height);
-    ctx.restore();
-
-    const zones = [
-      { name: 'bass', lit: bass, y: height * 0.74, spread: height * 0.18 },
-      { name: 'mid', lit: mid, y: height * 0.5, spread: height * 0.15 },
-      { name: 'high', lit: high, y: height * 0.26, spread: height * 0.17 }
-    ];
-
-    const spin = this.phase * Math.PI * 2;
-    for (const zone of zones) {
-      if (zone.lit < 0.05) continue;
-      this.paintCollageShape(
-        ctx,
-        {
-          name: zone.name,
-          lit: zone.lit,
-          points: 3 + Math.round(zone.lit * 3),
-          cx: width * 0.5 + Math.cos(spin * 1.3 + zone.y * 0.01) * width * 0.26,
-          cy: zone.y + Math.sin(spin * 2) * zone.spread,
-          radius: zone.lit * Math.min(width, height) * 0.28 * (1 + this.beat * 0.4),
-          rotation: spin + Math.random() * 0.7
-        },
-        { bass, mid, high }
-      );
-    }
-  }
-
-  paintCollageShape(ctx, shape, levels) {
-    // Blend between the band tokens by how much of each band is present. A
-    // bass-and-mid moment lands between red and green rather than jumping to a
-    // fourth colour the palette never agreed to. The previous version reached
-    // for pure yellow, cyan, magenta and white here, on the one mode the
-    // meetup demo ends on.
-    const total = levels.bass + levels.mid + levels.high || 1;
-    const own = this.colors[shape.name];
-    const mixed = [0, 1, 2].map(
-      (channel) =>
-        (this.colors.bass[channel] * levels.bass +
-          this.colors.mid[channel] * levels.mid +
-          this.colors.high[channel] * levels.high) /
-        total
-    );
-    // Two thirds its own band, one third the room. Keeps a shape identifiable
-    // as bass or high while still recording what else was playing under it.
-    const rgb = mixed.map((v, i) => Math.round(own[i] * 0.66 + v * 0.34));
-    const alpha = (0.16 + shape.lit * 0.45).toFixed(3);
-
-    ctx.save();
-    ctx.translate(shape.cx, shape.cy);
-    ctx.rotate(shape.rotation);
-    ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-    ctx.beginPath();
-    for (let i = 0; i < shape.points; i++) {
-      const angle = (i / shape.points) * Math.PI * 2;
-      const r = shape.radius * (0.6 + (i % 2) * 0.4);
-      const x = Math.cos(angle) * r;
-      const y = Math.sin(angle) * r;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  /* Custom Upload — the operator's own image, reacting.
-   *
-   * Bass scales, mid tilts, high splits the image into band-tinted copies. The
-   * split uses the band tokens, so even an arbitrary uploaded photograph is
-   * annotated in the product's own colour language. */
-  drawCustomMedia(p) {
-    if (!this.customMedia) {
-      this.drawDropTarget(p);
-      return;
-    }
-
-    const bass = this.band('bass');
-    const mid = this.band('mid');
-    const high = this.band('high');
-
-    const mediaW = this.customMedia.width || 1;
-    const mediaH = this.customMedia.height || 1;
-    const fit = Math.min(this.vw / mediaW, this.vh / mediaH) * 0.82;
-    const baseW = mediaW * fit;
-    const baseH = mediaH * fit;
-
-    p.push();
-    p.imageMode(p.CENTER);
-    p.scale(1 + bass * 0.18 + this.beat * 0.05);
-    p.rotateZ(Math.sin(this.phase * Math.PI * 2) * mid * 0.06);
-
-    if (high > 0.05) {
-      const offset = high * 26;
-      p.push();
-      p.tint(...this.colors.bass, 110);
-      p.image(this.customMedia, -offset, 0, baseW, baseH);
-      p.tint(...this.colors.high, 110);
-      p.image(this.customMedia, offset, 0, baseW, baseH);
-      p.pop();
-    }
-
-    // tint(255), never noTint(). In p5 1.9.0 noTint() sets the renderer's tint
-    // to null, and the WEBGL renderer hands that null to its uTint uniform and
-    // throws. p5 then stops its draw loop, so the stage froze on the first
-    // frame of any uploaded image. Full white is the same "no tint". PHI-222.
-    p.tint(255);
-    p.image(this.customMedia, 0, 0, baseW, baseH);
-    p.pop();
-
-    // The one full-field luminance change in the product, and the reason
-    // flashIntensity exists. Capped low: it is an accent on a photograph, not
-    // a strobe. WCAG 2.3.1.
-    const flash = this.beat;
-    if (flash > 0.05) {
-      p.push();
-      p.noStroke();
-      p.fill(255, 255, 255, flash * 55);
-      p.rect(-this.w / 2, -this.h / 2, this.w, this.h);
-      p.pop();
-    }
-  }
-
-  // A geometric drop target rather than a line of text. p5's WEBGL text()
-  // needs a loaded font file, and product principle 1 forbids fetching one at
-  // showtime — the previous p.text() call drew nothing at all. The rail's own
-  // status line carries the words.
-  drawDropTarget(p) {
-    const size = Math.min(this.vw, this.vh) * 0.24;
-    const half = size / 2;
-    // A shallow breath, not a fade to nothing. The first version dipped to an
-    // alpha of four and vanished against a projected black — an affordance that
-    // is only sometimes visible is not an affordance.
-    const pulse = 0.85 + Math.sin(this.time * 1.2) * 0.15;
-    const rgb = this.colors.mid;
-
-    p.push();
-    // A filled plate rather than a rounded outline: p5's WEBGL renderer drops
-    // the stroke on a rect with a corner radius, so the outlined version drew
-    // nothing at all.
-    p.noStroke();
-    p.fill(rgb[0], rgb[1], rgb[2], 46 * pulse);
-    p.rect(-half, -half, size, size, 18);
-
-    // Edges as four straight lines, which WEBGL does stroke.
-    this.emissiveStroke(p, rgb, 130 * pulse, 1.5, () => {
-      p.line(-half, -half, half, -half);
-      p.line(half, -half, half, half);
-      p.line(half, half, -half, half);
-      p.line(-half, half, -half, -half);
-    });
-
-    this.emissiveStroke(p, rgb, 200 * pulse, 2, () => {
-      p.line(-size * 0.18, 0, size * 0.18, 0);
-      p.line(0, -size * 0.18, 0, size * 0.18);
-    });
-    p.pop();
   }
 
   /* ------------------------------------------------------------ media i/o */
@@ -1622,7 +636,7 @@ class DJVisualizer {
       const video = this.p5Instance.createVideo([url], () => {
         video.volume(0);
         video.hide();
-        if (this.currentMode === 'custom') video.loop();
+        if (this.activeMode().usesMedia) video.loop();
         this.customMedia = video;
         if (this.customMediaStatus) this.customMediaStatus.textContent = `Loaded: ${file.name}`;
       });
@@ -1670,7 +684,8 @@ class DJVisualizer {
   stop() {
     this.isRunning = false;
     this.beat = 0;
-    this.spectrumPeaks = [];
+    // Mode state starts fresh on the next start: peak marks, collage timing.
+    this.memoryFor = null;
     this.resetCollage();
   }
 
@@ -1680,9 +695,12 @@ class DJVisualizer {
       this.collageCanvas.remove();
       this.collageCanvas = null;
       this.collageCtx = null;
+      this.collageLayer = null;
     }
     if (this.p5Instance) {
       this.p5Instance.remove();
     }
   }
 }
+
+export { DJVisualizer };

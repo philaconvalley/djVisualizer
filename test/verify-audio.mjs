@@ -215,7 +215,7 @@ async function tempoTest(wav, bpm) {
 }
 
 async function modeTest() {
-  console.log('\nAll nine modes, rendering against the 120 BPM pattern');
+  console.log('\nEvery registered mode, rendering against the 120 BPM pattern');
   await mkdir(OUT, { recursive: true });
 
   await withAudio('kick-120bpm.wav', async (page, errors) => {
@@ -223,7 +223,16 @@ async function modeTest() {
       opts.map((o) => ({ value: o.value, label: o.textContent.trim() }))
     );
 
-    check('ten modes are offered', modes.length === 10, `${modes.length} found`);
+    // The dropdown is built from the registry, so it must list every
+    // registered mode, in registry order. A new mode needs no edit here.
+    const registered = await page.evaluate(async () =>
+      (await import('/app/modes/index.js')).MODES.map((mode) => mode.id)
+    );
+    check(
+      'the dropdown offers every registered mode, in order',
+      modes.map((m) => m.value).join() === registered.join(),
+      `${modes.length} offered, ${registered.length} registered`
+    );
 
     // A rect with a corner radius is tessellated from scratch on every call in
     // p5 1.9 WEBGL. Spectrum drew 264 a frame and ran at 27 FPS on an M1 Max.

@@ -1,3 +1,7 @@
+import { AudioProcessor, DEBUG } from './audioProcessor.js';
+import { DJVisualizer } from './visualizer.js';
+import { MODES } from './modes/index.js';
+
 class DJVisualizerApp {
   constructor() {
     this.audioProcessor = new AudioProcessor();
@@ -123,7 +127,9 @@ class DJVisualizerApp {
       }
     });
 
-    // Before the visualizer reads the dropdown, so its first mode is a listed one.
+    // The dropdown is built from the registry, then cut to a show list. Both
+    // happen before the visualizer reads it, so its first mode is a listed one.
+    this.fillModeSelect();
     this.applyShowList();
 
     // Initialize visualizer
@@ -479,6 +485,14 @@ class DJVisualizerApp {
     }
   }
 
+  // One <option> per registered mode, in registry order. The markup holds no
+  // mode list of its own, so a new mode cannot be left out of it. PHI-163.
+  fillModeSelect() {
+    const select = document.getElementById('visualMode');
+    select.replaceChildren(...MODES.map((mode) => new Option(mode.label, mode.id)));
+    select.value = this.visualizer.currentMode;
+  }
+
   // `?modes=spectrum,waves,mandala,flow` cuts the dropdown down to a show list,
   // in the order given. The number keys read the dropdown, so they renumber
   // from 1 with no change of their own, and a slipped key cannot reach a mode
@@ -511,7 +525,7 @@ class DJVisualizerApp {
     // The visualizer has not attached its change listener yet, so set its
     // starting mode directly, along with the one control that follows the mode.
     this.visualizer.currentMode = select.value;
-    document.getElementById('customMediaSection').hidden = select.value !== 'custom';
+    document.getElementById('customMediaSection').hidden = !this.visualizer.activeMode().usesMedia;
 
     // The help panel must not promise keys the show list took away.
     const keys =
@@ -756,12 +770,15 @@ class DJVisualizerApp {
   }
 }
 
-// Initialize the app when the page loads
+// Initialize the app when the page loads. A module's top-level names are not
+// globals, so the app is put on window by hand: the hardware probe, the soak
+// probe, and the test drivers all reach it as `djApp` from the console.
 let djApp;
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     djApp = new DJVisualizerApp();
+    window.djApp = djApp;
     await djApp.init();
   } catch (error) {
     // Without this the rejection is swallowed and the operator gets a dead UI

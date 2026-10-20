@@ -14,8 +14,8 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 
 ## Architecture and File Map
 - `index.html`
-  - Loads p5.js from `vendor/` (never a CDN — the venue network is assumed hostile) and the three app scripts. p5.asciify is gone; it was pinned to a version that never existed and had been 404ing on every page load, including the Indy Hall set.
-  - Declares UI: device selector `#audioInputSelect`, transport and fullscreen buttons, visualization mode `#visualMode`, per-band sensitivity sliders, band level meters, readout, and the render container `#p5-canvas` (p5 WEBGL). Polygon Collage adds `#collage-canvas` beneath it at runtime.
+  - Loads p5.js from `vendor/` (never a CDN — the venue network is assumed hostile), then `app/app.js` as an ES module, which imports the rest. Modules do not load from `file://`, so serve the folder. p5.asciify is gone; it was pinned to a version that never existed and had been 404ing on every page load, including the Indy Hall set.
+  - Declares UI: device selector `#audioInputSelect`, transport and fullscreen buttons, visualization mode `#visualMode` (empty in the markup; `app.js` fills it from the mode registry), per-band sensitivity sliders, band level meters, readout, and the render container `#p5-canvas` (p5 WEBGL). Polygon Collage adds `#collage-canvas` beneath it at runtime.
 
 - `app/app.js` — `DJVisualizerApp`
   - Coordinates lifecycle and UI: start/stop, fullscreen, device enumeration and selection, gain controls, keyboard shortcuts, FPS/BPM display.
@@ -33,9 +33,16 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
   - Two clocks, deliberately. Analysis runs on a fixed `setInterval`, not chained to `requestAnimationFrame`, so a heavy visualization cannot throttle listening. Beat detection runs further out still, in an `AudioWorklet` on the audio thread, posting timestamped kick-envelope samples that the main thread drains in batches — measured under load, the main thread can fall to single-digit hertz, which is fewer samples than there are beats.
 
 - `app/visualizer.js` — `DJVisualizer`
-  - Renders all ten modes on one p5 WEBGL canvas in `#p5-canvas`. Polygon Collage additionally paints into a 2D `#collage-canvas` underneath, because it accumulates rather than clearing.
+  - Runs the stage: one p5 WEBGL canvas in `#p5-canvas`, the render loop, the shared state modes read, and the flash ceiling. It draws the active mode from the registry and knows nothing about any one mode. A mode with `clearsBackground: false` (Polygon Collage) also gets a 2D `#collage-canvas` underneath, because it accumulates rather than clearing.
   - All modes share one grammar — CSS band tokens for colour, stacked emissive passes for light, one response curve, one idle breath, beat-phase timing, and a composition box that clears the console rail. The file header states it in full; `DESIGN.md` explains why.
-  - Functions to note: `init()`, `updateAudioData(data)`, `onBeatEvent()`, `draw(p)`, `level(v)`, `band(name)`, `emissiveStroke(...)`, `emissiveDot(...)`, `drawSpectrum()`, `drawParticleField()`, `drawFrequencyRings()`, `drawWaveforms()`, `drawMandala()`, `drawTunnel()`, `drawGalaxy()`, `drawPolygonCollage()`, `drawCustomMedia()`, `drawFlow()`.
+  - Functions to note: `init()`, `updateAudioData(data)`, `onBeatEvent()`, `draw(p)`, `refreshStage(mode)`, `activeMode()`, `onModeChange(previous)`, `level(v)`, `band(name)`.
+
+- `app/modes/index.js` — the mode registry
+  - Exports `MODES`, the one ordered list of modes. The dropdown, the number keys, `?modes=`, and the sandbox all read it. The header documents the mode contract and the `stage` object a mode receives. One file per mode sits beside it.
+
+- `app/paint.js` — `GLOW`, `emissiveStroke()`, `emissiveDot()`, `roundedRect()`, the drawing helpers modes import.
+
+- `app/flashGuard.js` — `FlashGuard`, `FlashMeter`, the flash ceiling. It touches no browser API on load, so `test/verify-flash.mjs` imports it in Node.
 
 - `styles/styles.css`
   - All UI styling, layout, z-index for layered DOM + p5 renders.
@@ -79,44 +86,44 @@ The project is designed for live performance using a Pioneer DDJ-REV1 (preferred
 
 
 ## Visualization Modes
-Defined in `index.html` (`#visualMode`) and implemented in `DJVisualizer`.
+Each mode is one file in `app/modes/`, listed in order in `app/modes/index.js`.
 
-- Spectrum Bars (`drawSpectrum`)
+- Spectrum Bars (`app/modes/spectrum.js`)
   - 88 log-spaced bars across 20 Hz–20 kHz, coloured by which band each bar's centre frequency falls in, with peak-hold marks above them. Log spacing matters: linear FFT bins spend most of the screen above 4 kHz and squash every kick and vocal into the leftmost inch.
   - Always-on band meters in the rail (bass/mid/high) act as a quick signal check.
 
-- Floating Particles (`drawParticleField`)
+- Floating Particles (`app/modes/particles.js`)
   - 3D particle field of billboarded emissive discs, sorted back to front. Depth carries the band: bass far and heavy, highs near and quick.
 
-- Frequency Rings (`drawFrequencyRings`)
+- Frequency Rings (`app/modes/rings.js`)
   - Three nested groups, one per band, inner to outer in frequency order. Radius and weight follow the band; the rings breathe out of phase so the figure never reads as one solid disc pumping.
 
-- Wave Forms (`drawWaveforms`)
+- Wave Forms (`app/modes/waves.js`)
   - Three stacked waveforms. Shape is read from each band's own spectrum slice rather than from a sine wave, so what is on screen is the sound and not an animation timed to arrive alongside it.
 
-- Mandala (`drawMandala`)
+- Mandala (`app/modes/mandala.js`)
   - Radial spokes whose count comes from band energy, so the figure gains and loses structure with the music. Every fourth spoke extends on the beat.
 
-- Tunnel Vision (`drawTunnel`)
+- Tunnel Vision (`app/modes/tunnel.js`)
   - Rings advancing by beat phase, so the tunnel moves a fixed distance per beat. Colour by depth in frequency order — a spectrum you fly through.
 
-- Galaxy (`drawGalaxy`)
+- Galaxy (`app/modes/galaxy.js`)
   - Spiral arms where radius carries frequency: bass at the core, air at the rim. A bass drop lights the centre, a hi-hat pattern lights the edge.
 
-- Polygon Collage (`drawPolygonCollage`)
+- Polygon Collage (`app/modes/polygons.js`)
   - Paint lands and stays, so by the end of a track the screen is a record of what was played. Renders into `#collage-canvas`, a 2D layer beneath the transparent WEBGL one, with a very slow fade so a long set does not turn to mud.
 
-- Flow (`drawFlow`)
+- Flow (`app/modes/flow.js`)
   - Three layers reading as one weather system: streams travelling across the frame on per-band diagonals, a ring of nodes linked to their neighbours while their band carries energy, and stacked waves beneath. Salvaged — it was a finished mode stranded behind `drawSnakeGame`, an entry point nothing called, and was nearly deleted as dead code.
 
-- Custom Upload (`drawCustomMedia`)
+- Custom Upload (`app/modes/custom.js`)
   - The operator's own image, GIF, or video. Bass scales it, mid tilts it, high splits it into band-tinted copies. With nothing loaded it draws a geometric drop target — p5's WEBGL `text()` needs a font file, and fetching one at showtime is forbidden.
 
 All modes use the same band colour semantics, read from the CSS tokens at
 startup rather than hard-coded per mode:
-- Bass (20–250 Hz): `--bass` → `this.colors.bass`
-- Mid (250 Hz–4 kHz): `--mid` → `this.colors.mid`
-- High (4–20 kHz): `--high` → `this.colors.high`
+- Bass (20–250 Hz): `--bass` → `stage.colors.bass`
+- Mid (250 Hz–4 kHz): `--mid` → `stage.colors.mid`
+- High (4–20 kHz): `--high` → `stage.colors.high`
 
 They also share one grammar beyond colour — stacked emissive passes, one
 response curve, one idle breath, beat-phase timing, and a composition box that
@@ -194,9 +201,8 @@ It cannot cover device enumeration, USB line level, thermals, or the projector.
 
 ## Extend and Customize
 - Add a new visualization mode
-  - In `index.html` add `<option value="myMode">My Mode</option>` — keys 1–9 then 0 map to dropdown order, so position matters, and an eleventh mode would have no shortcut at all.
-  - In `DJVisualizer.draw()` add a new case `"myMode"` and implement `drawMyMode(p)`.
-  - Follow the stage grammar, or the mode will look like it came from a different product. `CONTRIBUTING.md` has the checklist; the short version is: colour from `this.colors`, levels through `this.band()`, light through `emissiveStroke`/`emissiveDot`, timing off `this.phase` and `this.beat`, composition inside `this.vw` × `this.vh`.
+  - Write `app/modes/my-mode.js`, then import it and add it to `MODES` in `app/modes/index.js`. That is the whole change: the dropdown, the number keys, and `?modes=` read the registry. Keys 1–9 then 0 follow registry order, and an eleventh mode would have no shortcut at all.
+  - Follow the stage grammar, or the mode will look like it came from a different product. `CONTRIBUTING.md` has the checklist; the short version is: colour from `stage.colors`, levels through `stage.band()`, light through `emissiveStroke`/`emissiveDot` from `app/paint.js`, timing off `stage.phase` and `stage.beat`, composition inside `stage.vw` × `stage.vh`.
   - Run `npm run verify` and look at your mode's screenshot in `test/output/`.
 
 - Integrate feature detection or more advanced onset/BPM libraries

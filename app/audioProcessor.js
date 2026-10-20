@@ -1,6 +1,6 @@
 // Verbose logging, off by default. Load the app with ?debug to turn it on.
-// One flag for the whole app: this file loads first, so app.js reads the same
-// global instead of declaring its own copy that could drift. Guard each call
+// One flag for the whole app: app.js imports this one instead of declaring its
+// own copy that could drift. Guard each call
 // with `if (DEBUG)` so the arguments are never built when the flag is off, and
 // do not reassign console.log to a no-op — that breaks the devtools link to
 // the source line. Warnings and errors are not gated. PHI-153.
@@ -1049,3 +1049,5 @@ class AudioProcessor {
     };
   }
 }
+
+export { AudioProcessor, BANDS, DEBUG };

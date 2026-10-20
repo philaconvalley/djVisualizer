@@ -9,26 +9,26 @@
  * The student's file is a configuration, not a program. Every value below is
  * read from HTML or CSS, validated, and replaced with a default when it does
  * not parse. Nothing a student can type in this file throws. PHI-223.
+ *
+ * It is an ES module, and the only script a sandbox page loads after p5. It
+ * imports the analyser and the stage, which import the rest. A module runs
+ * after the page is parsed, so the element below is defined once the whole
+ * student file has been read, and connecting it is what boots it.
  */
 
+import { AudioProcessor } from '../app/audioProcessor.js';
+import { DJVisualizer } from '../app/visualizer.js';
+import { MODES as REGISTRY } from '../app/modes/index.js';
+
 // Every mode a student may type into `mode`, and the list the template's comment
-// offers them. `custom` is deliberately absent: it draws the GIF, so with no GIF
-// it renders a pulsing empty square across the whole stage, says nothing, and
-// throws nothing. An edit that looks like a broken page is worse than one the
-// list never offered. applyGif assigns that mode directly and never looks it up
-// here, so the GIF path is unaffected. Keep this list and the template's comment
-// the same.
-const MODES = [
-  'spectrum',
-  'particles',
-  'rings',
-  'waves',
-  'mandala',
-  'tunnel',
-  'galaxy',
-  'polygons',
-  'flow'
-];
+// offers them: every registered mode except the ones that show uploaded media.
+// `custom` is the one of those: it draws the GIF, so with no GIF it renders a
+// pulsing empty square across the whole stage, says nothing, and throws
+// nothing. An edit that looks like a broken page is worse than one the list
+// never offered. applyGif assigns that mode directly and never looks it up
+// here, so the GIF path is unaffected. Keep the template's comment the same as
+// this list.
+const MODES = REGISTRY.filter((mode) => !mode.usesMedia).map((mode) => mode.id);
 
 const DEFAULT_MODE = 'flow';
 

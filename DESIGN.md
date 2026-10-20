@@ -130,12 +130,12 @@ part of the design.
 
 The rule is that **the direction is a grammar, not a mood**, so it can be
 enforced in code rather than remembered. Six clauses, all mechanically present
-in `app/visualizer.js`:
+in `app/visualizer.js` and the `stage` object it hands each mode in `app/modes/`:
 
 | Clause | What it means | Where it lives |
 | --- | --- | --- |
 | **One palette** | Colour is read from the CSS band tokens at startup. Nothing on the stage is saturated unless it is a band. | `readPalette()`, `this.colors` |
-| **Light, not ink** | Emissive elements draw as three stacked passes — wide and faint under tight and bright. | `emissiveStroke()`, `emissiveDot()` |
+| **Light, not ink** | Emissive elements draw as three stacked passes — wide and faint under tight and bright. | `emissiveStroke()`, `emissiveDot()` in `app/paint.js` |
 | **One response law** | Every mode reads levels through one curve, so all ten react to the same music with the same sensitivity. | `level()`, `band()` |
 | **Honest silence** | No mode fabricates motion when there is no signal. Silence is one shared slow breath. | `idle` |
 | **Musical time** | Motion is driven by beat phase re-anchored on real detected beats, not by wall clock. | `phase`, `beat`, `onBeatEvent()` |
@@ -207,7 +207,7 @@ Hover is gated behind `@media (hover: hover) and (pointer: fine)` so touch does 
 ## Accessibility
 
 - **Photosensitivity is a product requirement, not a preference** (WCAG 2.3.1). Three layers, PHI-265:
-  - **The flash ceiling** is the last stage of the render path. After every mode draws, the flash guard samples the composited frame and counts luminance and saturated-red transitions over the last second, in overlapping regions a third of the width by a third of the height. That is the WCAG flash area; a whole-screen average would dilute a flash that size. If a frame would start a fourth flash, a black veil dims it before the browser presents it. It is not a setting and nothing in the UI raises it. It lives in `app/visualizer.js` because student pens load that file by URL. Prove it with `npm run verify:flash`, and with `?flashlog` on the event machine.
+  - **The flash ceiling** is the last stage of the render path. After every mode draws, the flash guard samples the composited frame and counts luminance and saturated-red transitions over the last second, in overlapping regions a third of the width by a third of the height. That is the WCAG flash area; a whole-screen average would dilute a flash that size. If a frame would start a fourth flash, a black veil dims it before the browser presents it. It is not a setting and nothing in the UI raises it. It lives in `app/flashGuard.js`, and `app/visualizer.js` imports it, so every page that draws the stage gets it, student pens included. Prove it with `npm run verify:flash`, and with `?flashlog` on the event machine.
   - **Reduce motion** is a separate render path, not a dimmer one: no beat strikes, a frozen beat phase, and band levels that glide with a 1.5-second time constant. Colour and slow time-driven drift remain, so the stage is never still. The control lives in the **always-visible rail**, labelled in plain words, because a touch user at an installation cannot type `?`. It defaults on when `prefers-reduced-motion` matches and is overridable in both directions.
   - **The warning** is a modal dialog before anything else, on every device: "Heads up: flashing visuals." with Continue and Reduce motion. Esc cannot dismiss it unanswered. The answer lasts for the browser session, so an operator reload does not put it back on the projector. A line on the pre-start stage repeats it.
 - `visualizer.flashIntensity` still exists for the student sandbox's "Reduce flash" control, which damps beat accents only.
