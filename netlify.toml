@@ -32,6 +32,23 @@
     Access-Control-Allow-Origin = "*"
 
 [[headers]]
+  for = "/app/*"
+  # The workshop pen on CodePen loads sandbox/engine.js as an ES module, and it
+  # imports everything in app/. A browser fetches a module from another origin
+  # in CORS mode, so without this header the pen gets a black stage and only a
+  # console error says why. A plain <script src> needed no header; modules do
+  # (PHI-163). This is public source code, so any origin may read it.
+  # test/smoke-deploy.mjs checks every module the pages import.
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/sandbox/*"
+  # The same reason as /app/*: the pen imports sandbox/engine.js as a module.
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
   for = "*.js"
   [headers.values]
     Content-Type = "application/javascript"

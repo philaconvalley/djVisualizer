@@ -70,6 +70,9 @@ python3 -m http.server 8000    # or: npx serve .
 
 Open `http://localhost:8000`, pick a source, and press Start.
 
+You need the local server. The app is ES modules, and a browser does not load
+modules from a `file://` page. Double-clicking `index.html` gives a blank stage.
+
 There is no build step and no runtime dependency to install. p5.js is vendored
 in `vendor/` on purpose — the app must never need the network at showtime.
 
@@ -152,11 +155,16 @@ and read the `[flash]` lines in the browser console.
 ## Project structure
 
 ```
-index.html              Markup, direction contract, script tags
+index.html              Markup, direction contract, the one module tag
 app/
-  app.js                Lifecycle, devices, controls, keyboard
+  app.js                Entry module: lifecycle, devices, controls, keyboard
   audioProcessor.js     Web Audio graph, band analysis, beat detection
-  visualizer.js         All ten modes, one shared stage grammar
+  visualizer.js         The stage: render loop, shared state, stage grammar
+  flashGuard.js         The flash ceiling (WCAG 2.3.1)
+  paint.js              Emissive drawing helpers every mode imports
+  modes/
+    index.js            The mode registry and the mode contract
+    *.js                One file per visualization mode
 styles/styles.css       Design tokens and console styling
 vendor/p5.min.js        Vendored p5 1.9.0 — never a CDN
 sandbox/

@@ -16,7 +16,9 @@
  * It reads the asset list out of the page rather than hard-coding paths, so
  * adding a file cannot silently escape the check — the same enumerate-versus-
  * describe lesson that caused the original bug. It does this for two pages: the
- * live app at `/` and the student sandbox at `/sandbox/`.
+ * live app at `/` and the student sandbox at `/sandbox/`. Each page loads one
+ * ES module that imports the rest, so the check follows every static import
+ * too, and asserts each module carries the CORS header the CodePen pen needs.
  *
  *   node test/smoke-deploy.mjs                       # the live site
  *   node test/smoke-deploy.mjs https://some-preview   # a deploy preview
@@ -94,9 +96,10 @@ for (const root of ROOTS) {
   }
 
   const found = [
-    ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => ({
+    ...[...page.body.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map((m) => ({
       path: m[1],
-      kind: 'js'
+      kind: 'js',
+      module: /type=["']module["']/i.test(m[0])
     })),
     ...[...page.body.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/gi)].map(
       (m) => ({ path: m[1], kind: 'css' })
@@ -112,7 +115,21 @@ for (const root of ROOTS) {
     const href = new URL(asset.path, `${BASE}${root.path}`).pathname;
     if (seen.has(href)) continue;
     seen.add(href);
-    assets.push({ path: href, kind: asset.kind });
+    assets.push({ path: href, kind: asset.kind, module: !!asset.module });
+  }
+}
+
+/* A module's imports are assets the markup never names: app/modes/*.js exist
+   only as import lines. Each one found is pushed onto the same list the loop
+   below is walking, so it is fetched and checked like the rest, and its own
+   imports are followed in turn. Static imports only; the app has no others. */
+const IMPORT = /^\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm;
+function queueImports(fromPath, body) {
+  for (const m of body.matchAll(IMPORT)) {
+    const href = new URL(m[1], `${BASE}${fromPath}`).pathname;
+    if (seen.has(href)) continue;
+    seen.add(href);
+    assets.push({ path: href, kind: 'js', module: true });
   }
 }
 
@@ -144,6 +161,15 @@ for (const asset of assets) {
     res.type || 'no content-type'
   );
   check(`${href} is not empty`, res.body.length > 200, `${res.body.length} bytes`);
+
+  /* The workshop pen on codepen.io loads sandbox/engine.js as a module, and a
+     browser fetches a module from another origin in CORS mode. A module that
+     comes back without Access-Control-Allow-Origin gives the pen a black stage
+     and nothing on the page says why. PHI-163. */
+  if (asset.module) {
+    check(`${href} can be imported from CodePen`, res.cors === '*', res.cors || 'no CORS header');
+    if (res.status === 200 && !isHtml) queueImports(href, res.body);
+  }
 }
 
 /* A path that should not exist must 404. If it returns 200 the host is
