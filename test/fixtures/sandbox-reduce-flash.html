@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- TEST FIXTURE for test/verify-sandbox.mjs. The workshop pen's tag, with
+     reduce-flash="on": Reduce flash starts ticked even when the system asks
+     for nothing. A CodePen preview reloads on every edit, so a tick by hand
+     does not survive; the attribute does. PHI-229.
+     It lives here, not in sandbox/, for the reason sandbox-attributes.html
+     gives. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="../../sandbox/sandbox.css" />
+    <script src="../../vendor/p5.min.js"></script>
+    <script type="module" src="../../sandbox/engine.js"></script>
+
+    <title>Sandbox fixture</title>
+
+    <style>
+      :root {
+        --bass: #ff453a;
+        --mid: #30d158;
+        --high: #0a84ff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <dj-visualizer dj-name="TEST DJ" mode="rings" gif="" reduce-flash="on"></dj-visualizer>
+  </body>
+</html>
