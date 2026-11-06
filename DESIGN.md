@@ -283,12 +283,16 @@ because that check lives in `app/app.js`, which the sandbox never runs. A room o
 20 students who did not choose the content is exactly the audience the rule is for.
 
 - Row 1 carries the main app's `.toggle`, "Reduce flash".
-- It defaults from `prefers-reduced-motion`, follows changes to it, and is overridable in
-  both directions.
-- `reduce-flash="on"` on the tag also starts it ticked. The workshop pen ships with it
-  (PHI-229, 2026-11-05). A tick by hand does not last in CodePen, because the preview
-  reloads on every edit and the box comes back from the code. Any other value, or no
-  attribute, leaves the system setting in charge.
+- It **starts ticked**, unlike the main app's (PHI-229, 2026-11-05). The pen exists for a
+  room of students watching a projected show. The default lives in the engine, not in the
+  student's code, because the student's code is where the typos are: a dropped quote
+  removes the whole tag and the engine rebuilds it with no attributes, and a deleted or
+  misspelled attribute must not turn flashing up.
+- Only `reduce-flash="off"` starts it unticked, and `prefers-reduced-motion` still wins
+  over that. The workshop pen also carries `reduce-flash="on"`, which changes nothing but
+  shows the setting in the code. It follows changes to the system setting, and the student
+  can untick it. A tick by hand does not last in CodePen, because the preview reloads on
+  every edit and the box comes back from the code.
 - On, it sets `flashIntensity` to `0.15`; off, to `1`. Same values as `app/app.js`.
 
 ## Open decisions

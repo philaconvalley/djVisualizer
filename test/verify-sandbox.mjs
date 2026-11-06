@@ -829,15 +829,25 @@ async function consoleTest(browser, base) {
     !!state && state.railMeasured,
     state && `visualizer ${state.railH} vs rail ${state.railPx}`
   );
-  check('flashing is full when the system asks for nothing', !!state && state.flash === 1);
+  check(
+    'flashing starts reduced when neither the system nor the code asks (PHI-229)',
+    !!state && state.flash === 0.15
+  );
 
   const toggled = await page.evaluate(() => {
     const el = window.djSandbox;
+    el.flashInput.checked = false;
+    el.flashInput.dispatchEvent(new Event('change'));
+    const full = el.visualizer.flashIntensity;
     el.flashInput.checked = true;
     el.flashInput.dispatchEvent(new Event('change'));
-    return el.visualizer.flashIntensity;
+    return { full, reduced: el.visualizer.flashIntensity };
   });
-  check('Reduce flash turns flashing down', toggled === 0.15, String(toggled));
+  check(
+    'Reduce flash moves flashing between full and reduced',
+    toggled.full === 1 && toggled.reduced === 0.15,
+    JSON.stringify(toggled)
+  );
 
   // From the design review. The track clips its fill and used to clip the
   // slider's focus outline with it, so keyboard focus was invisible.
@@ -901,10 +911,13 @@ async function consoleTest(browser, base) {
   await reduced.close();
 }
 
-// PHI-229. A room of students watches a projected show, so the workshop pen
-// starts with Reduce flash on. A tick by hand cannot do that: CodePen reloads
-// the preview on every edit, and the box comes back from the attribute, not
-// from the last tick. A student may still untick it.
+// PHI-229. A room of students watches a projected show, so the pen starts with
+// Reduce flash on, and only reduce-flash="off" turns that default off. The
+// default sits in the engine, not in the student's code, because the student's
+// code is where the typos are: a dropped quote removes the whole tag, and a
+// deleted or misspelled attribute must not turn flashing up. A tick by hand
+// would not last either, because CodePen reloads the preview on every edit.
+// A student may still untick the box.
 const readFlash = () => ({
   flash: window.djSandbox ? window.djSandbox.visualizer.flashIntensity : null,
   ticked: window.djSandbox ? window.djSandbox.flashInput.checked : null
@@ -947,6 +960,31 @@ async function reduceFlashAttributeTest(browser, base) {
     JSON.stringify(offState)
   );
   await off.page.close();
+
+  // A value that is not exactly "off" is a typo, not a choice.
+  const typo = await sandboxPage(browser, base, 'sandbox-reduce-flash-typo.html');
+  const typoState = await typo.page.evaluate(readFlash);
+  check(
+    'a misspelled value, reduce-flash="of", keeps flashing reduced',
+    typoState.flash === 0.15 && typoState.ticked === true,
+    JSON.stringify(typoState)
+  );
+  await typo.page.close();
+
+  // An unclosed quote drops the whole tag, and the engine rebuilds it with no
+  // attributes at all. The rebuilt pen must still start reduced.
+  const broken = await sandboxPage(browser, base, 'sandbox-broken-quote.html');
+  const brokenState = await broken.page.evaluate(() => ({
+    rebuilt: !!(window.djSandbox && window.djSandbox.rebuilt),
+    flash: window.djSandbox ? window.djSandbox.visualizer.flashIntensity : null,
+    ticked: window.djSandbox ? window.djSandbox.flashInput.checked : null
+  }));
+  check(
+    'a tag rebuilt after a dropped quote starts with flashing reduced',
+    brokenState.rebuilt && brokenState.flash === 0.15 && brokenState.ticked === true,
+    JSON.stringify(brokenState)
+  );
+  await broken.page.close();
 }
 
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
