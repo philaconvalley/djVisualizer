@@ -397,16 +397,19 @@ class DJVisualizerSandbox extends HTMLElement {
     return row;
   }
 
-  // A safety control, as in the main app's rail (app/app.js): defaulted from
-  // the system's reduced-motion setting, following it when it changes, and
-  // overridable in both directions. The main app's own copy of this never runs
-  // here, because the sandbox does not load app.js. The visualizer does not
-  // exist yet when the rail is built, so the value is applied in
-  // connectedCallback and on every change after that.
+  // A safety control, as in the main app's rail (app/app.js), overridable in
+  // both directions. The main app's own copy of this never runs here, because
+  // the sandbox does not load app.js. The visualizer does not exist yet when
+  // the rail is built, so the value is applied in connectedCallback and on
+  // every change after that.
   //
-  // reduce-flash="on" in the pen also starts it ticked. A room of students
-  // watching a projected show needs that by default, and a tick by hand does
-  // not last: CodePen reloads the preview on every edit. PHI-229.
+  // Unlike the main app, it starts ticked. This page exists for a room of
+  // students watching a projected show, and the default lives here, not in the
+  // student's code, because the student's code is where the typos are: a
+  // dropped quote removes the whole tag, and a deleted or misspelled attribute
+  // must not turn flashing up. Only reduce-flash="off" starts it unticked, and
+  // a system that asks for reduced motion still wins over that. A tick by hand
+  // would not last anyway: CodePen reloads the preview on every edit. PHI-229.
   buildReduceFlash() {
     const toggle = document.createElement('label');
     toggle.className = 'toggle';
@@ -419,13 +422,13 @@ class DJVisualizerSandbox extends HTMLElement {
     text.textContent = 'Reduce flash';
     toggle.append(this.flashInput, text);
 
-    const askedInCode = (this.getAttribute('reduce-flash') || '').trim().toLowerCase() === 'on';
+    const optedOut = (this.getAttribute('reduce-flash') || '').trim().toLowerCase() === 'off';
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    this.flashInput.checked = query.matches || askedInCode;
+    this.flashInput.checked = query.matches || !optedOut;
     this.flashInput.addEventListener('change', () => this.applyFlash());
     if (query.addEventListener) {
       query.addEventListener('change', (event) => {
-        this.flashInput.checked = event.matches || askedInCode;
+        this.flashInput.checked = event.matches || !optedOut;
         this.applyFlash();
       });
     }
