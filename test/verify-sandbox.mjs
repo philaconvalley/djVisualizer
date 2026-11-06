@@ -337,6 +337,12 @@ async function shippedTemplateTest(browser, base) {
       shippedBoosts.high === 1,
     JSON.stringify(shippedBoosts)
   );
+  const shippedFlash = await page.evaluate(readFlash);
+  check(
+    'the shipped template starts with Reduce flash on (PHI-229)',
+    shippedFlash.flash === 0.15 && shippedFlash.ticked === true,
+    JSON.stringify(shippedFlash)
+  );
   check(
     "the shipped template's --bass reaches the canvas",
     state.colours && String(state.colours.bass) === '255,69,58',
@@ -895,6 +901,54 @@ async function consoleTest(browser, base) {
   await reduced.close();
 }
 
+// PHI-229. A room of students watches a projected show, so the workshop pen
+// starts with Reduce flash on. A tick by hand cannot do that: CodePen reloads
+// the preview on every edit, and the box comes back from the attribute, not
+// from the last tick. A student may still untick it.
+const readFlash = () => ({
+  flash: window.djSandbox ? window.djSandbox.visualizer.flashIntensity : null,
+  ticked: window.djSandbox ? window.djSandbox.flashInput.checked : null
+});
+
+async function reduceFlashAttributeTest(browser, base) {
+  const { page, thrown } = await sandboxPage(browser, base, 'sandbox-reduce-flash.html');
+
+  check('the reduce-flash fixture throws nothing', thrown.length === 0, thrown.join(' | '));
+  const start = await page.evaluate(readFlash);
+  check(
+    'reduce-flash="on" starts with Reduce flash on, with no system setting',
+    start.flash === 0.15 && start.ticked === true,
+    JSON.stringify(start)
+  );
+
+  const unticked = await page.evaluate(() => {
+    const el = window.djSandbox;
+    el.flashInput.checked = false;
+    el.flashInput.dispatchEvent(new Event('change'));
+    return el.visualizer.flashIntensity;
+  });
+  check('a student can still untick it', unticked === 1, String(unticked));
+
+  await page.reload();
+  await page.waitForTimeout(700);
+  const reloaded = await page.evaluate(readFlash);
+  check(
+    'a reload, as CodePen does on every edit, brings it back on',
+    reloaded.flash === 0.15 && reloaded.ticked === true,
+    JSON.stringify(reloaded)
+  );
+  await page.close();
+
+  const off = await sandboxPage(browser, base, 'sandbox-reduce-flash-off.html');
+  const offState = await off.page.evaluate(readFlash);
+  check(
+    'reduce-flash="off" leaves flashing full',
+    offState.flash === 1 && offState.ticked === false,
+    JSON.stringify(offState)
+  );
+  await off.page.close();
+}
+
 // Finding 7, finished. "Has a cause" was a proxy for "this project wrote this
 // string", and the proxy fails for everything thrown inside attachStream —
 // a failed audioWorklet.addModule most of all. These two stubs are the two
@@ -1061,6 +1115,7 @@ try {
   await gifButtonTest(browser, BASE);
   await gifPlaysTest(browser, BASE);
   await consoleTest(browser, BASE);
+  await reduceFlashAttributeTest(browser, BASE);
 } finally {
   await browser.close();
   server.close();

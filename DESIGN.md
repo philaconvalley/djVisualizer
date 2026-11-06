@@ -285,6 +285,10 @@ because that check lives in `app/app.js`, which the sandbox never runs. A room o
 - Row 1 carries the main app's `.toggle`, "Reduce flash".
 - It defaults from `prefers-reduced-motion`, follows changes to it, and is overridable in
   both directions.
+- `reduce-flash="on"` on the tag also starts it ticked. The workshop pen ships with it
+  (PHI-229, 2026-11-05). A tick by hand does not last in CodePen, because the preview
+  reloads on every edit and the box comes back from the code. Any other value, or no
+  attribute, leaves the system setting in charge.
 - On, it sets `flashIntensity` to `0.15`; off, to `1`. Same values as `app/app.js`.
 
 ## Open decisions
